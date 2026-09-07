@@ -76,7 +76,10 @@ def file_request(request: ChatRequest, session_id: str, info: GuardrailInfo) -> 
     try:
         ticket, _classification, notified = tickets.intake(
             RequestIntake(
-                text=request.message, session_id=session_id, user_id=request.user_id, channel=request.mode
+                text=request.message,
+                session_id=session_id,
+                user_id=request.user_id,
+                channel="voice" if request.mode == "voice" else "chat",
             )
         )
     except tickets.TicketError as exc:

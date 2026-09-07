@@ -100,6 +100,22 @@ def test_chat_without_ticket_backend(monkeypatch):
     assert body["ticket"] is None and "can't file tickets" in body["answer"]
 
 
+def test_text_mode_maps_to_chat_channel(monkeypatch):
+    monkeypatch.setattr(guardrails, "check_input", lambda text: Verdict(True, "none"))
+    monkeypatch.setattr(retrieval, "search", lambda *a, **k: [])
+    monkeypatch.setattr(intent, "detect", lambda message: "request")
+    seen = []
+
+    def fake_intake(request):
+        seen.append(request.channel)
+        return make_ticket(), {}, True
+
+    monkeypatch.setattr(tickets, "intake", fake_intake)
+    with TestClient(app) as client:
+        client.post("/v1/chat", json={"message": "I need a new laptop", "mode": "text"})
+    assert seen == ["chat"]
+
+
 def test_ticket_notice_text():
     fulfilled = make_ticket("fulfilled", approver="mohamed.adel.heiba")
     assert "approved by mohamed.adel.heiba and has been fulfilled" in notifications.ticket_text(fulfilled)

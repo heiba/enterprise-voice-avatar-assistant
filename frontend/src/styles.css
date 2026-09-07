@@ -44,8 +44,10 @@ button.secondary { background: var(--surface); border: 1px solid var(--border); 
 
 .banner { padding: 8px 24px; background: var(--accent-soft); border-bottom: 1px solid #f5c2c2; font-size: 0.85rem; }
 
-.layout { flex: 1; display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 16px; padding: 16px 24px; }
+.layout { flex: 1; display: grid; grid-template-columns: minmax(320px, 1.1fr) minmax(0, 1.4fr) minmax(260px, 0.9fr); gap: 16px; padding: 16px 24px; align-items: start; }
+@media (max-width: 1200px) { .layout { grid-template-columns: minmax(0, 1fr) minmax(260px, 0.8fr); } .avatar-column { grid-column: 1 / -1; position: static; } }
 @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+.avatar-column { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .chat-column { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 
 .chat { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); min-height: 60vh; }
@@ -76,8 +78,9 @@ button.cite { display: inline-block; min-width: 20px; height: 20px; padding: 0 5
 .voice-error { color: var(--accent); }
 .voice-room { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
 .voice-stage { display: flex; flex-direction: column; gap: 10px; }
-.avatar-frame { display: flex; align-items: center; justify-content: center; height: 180px; background: var(--bg); border-radius: 10px; overflow: hidden; }
-.avatar-video { width: 100%; height: 100%; object-fit: cover; }
+.avatar-frame { display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 16 / 9; max-height: 62vh; background: #0b0d10; border-radius: 10px; overflow: hidden; }
+.avatar-frame.avatar-idle { background: var(--bg); border: 1px dashed var(--border); }
+.avatar-video { width: 100%; height: 100%; object-fit: contain; }
 .visualizer { width: 60%; height: 120px; --lk-va-bar-width: 16px; --lk-va-bar-gap: 10px; --lk-fg: var(--accent); }
 .voice-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.85rem; }
 .voice-state { padding: 4px 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }

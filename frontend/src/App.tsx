@@ -106,9 +106,11 @@ export default function App() {
         <strong>AI-generated answers</strong> from company documents. Verify against the cited source before acting on them.
       </div>
       <main className="layout">
+        <section className="avatar-column">
+          <VoicePanel sessionId={sessionId} userName={userName} onAssistantTurn={onAssistantTurn} />
+        </section>
         <section className="chat-column">
           <ChatPanel messages={messages} busy={busy} onSend={send} onCite={setSelected} onSelectMessage={showCitations} />
-          <VoicePanel sessionId={sessionId} userName={userName} onAssistantTurn={onAssistantTurn} />
         </section>
         <aside className="citations-column">
           <CitationsPanel citations={citations} selected={selected} onSelect={setSelected} />

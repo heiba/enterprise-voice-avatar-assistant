@@ -3,11 +3,14 @@
 import logging
 from typing import Any
 
+import aiohttp
+
 from .config import settings
 
 log = logging.getLogger("voice-agent.avatar")
 
 PROVIDERS = ("none", "simli", "tavus", "hedra")
+TAVUS_API_URL = "https://tavusapi.com/v2"
 
 
 def provider() -> str:
@@ -96,3 +99,36 @@ async def start(session: Any, room: Any) -> Any | None:
     await avatar.start(session, room=room, **kwargs)
     log.info("avatar provider %s started", provider())
     return avatar
+
+
+async def _end_tavus_conversation(conversation_id: str, api_key: str) -> int:
+    async with (
+        aiohttp.ClientSession() as http,
+        http.post(
+            f"{TAVUS_API_URL}/conversations/{conversation_id}/end",
+            headers={"x-api-key": api_key},
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as resp,
+    ):
+        return resp.status
+
+
+async def stop(avatar: Any) -> None:
+    """End the provider-side session when the room closes. The Tavus plugin never ends its
+    conversation, which keeps billing minutes and, on single-stream plans, blocks the next session."""
+    if avatar is None:
+        return
+    if provider() == "tavus":
+        conversation_id = getattr(avatar, "conversation_id", None)
+        if conversation_id and settings.tavus_api_key:
+            try:
+                status = await _end_tavus_conversation(conversation_id, settings.tavus_api_key)
+                log.info("tavus conversation %s ended (http %s)", conversation_id, status)
+            except (aiohttp.ClientError, TimeoutError, OSError) as exc:
+                log.warning("could not end tavus conversation %s: %s", conversation_id, exc)
+    aclose = getattr(avatar, "aclose", None)
+    if callable(aclose):
+        try:
+            await aclose()
+        except Exception as exc:  # noqa: BLE001 - provider-specific errors, never fatal at shutdown
+            log.debug("avatar aclose failed: %s", exc)

@@ -25,7 +25,9 @@ log = logging.getLogger("voice-agent")
 
 def build_stt():
     client = openai_sdk.AsyncClient(
-        base_url=settings.stt_base_url, api_key=settings.stt_api_key or "none", http_client=async_http_client(60)
+        base_url=settings.stt_base_url,
+        api_key=settings.stt_api_key or "none",
+        http_client=async_http_client(60),
     )
     return openai.STT(model=settings.stt_model, language=settings.stt_language, client=client)
 
@@ -35,17 +37,25 @@ def build_tts():
         from livekit.plugins import elevenlabs
 
         return elevenlabs.TTS(
-            voice_id=settings.elevenlabs_voice_id, model=settings.elevenlabs_model, api_key=settings.elevenlabs_api_key
+            voice_id=settings.elevenlabs_voice_id,
+            model=settings.elevenlabs_model,
+            api_key=settings.elevenlabs_api_key,
         )
     client = openai_sdk.AsyncClient(
-        base_url=settings.tts_base_url, api_key=settings.tts_api_key or "none", http_client=async_http_client(60)
+        base_url=settings.tts_base_url,
+        api_key=settings.tts_api_key or "none",
+        http_client=async_http_client(60),
     )
-    return openai.TTS(model=settings.tts_model, voice=settings.tts_voice, speed=settings.tts_speed, client=client)
+    return openai.TTS(
+        model=settings.tts_model, voice=settings.tts_voice, speed=settings.tts_speed, client=client
+    )
 
 
 def build_llm():
     """Direct LLM, only used by the framework if a turn bypasses llm_node."""
-    return openai.LLM(model=settings.llm_model, base_url=settings.llm_base_url, api_key=settings.llm_api_key or "none")
+    return openai.LLM(
+        model=settings.llm_model, base_url=settings.llm_base_url, api_key=settings.llm_api_key or "none"
+    )
 
 
 class Assistant(Agent):
@@ -100,6 +110,22 @@ async def entrypoint(ctx: JobContext) -> None:
         min_endpointing_delay=settings.min_endpointing_delay,
     )
     avatar = await avatars.start(session, ctx.room)
+
+    async def stop_avatar() -> None:
+        await avatars.stop(avatar)
+
+    ctx.add_shutdown_callback(stop_avatar)
+
+    human_identity = participant.identity if participant else None
+
+    @ctx.room.on("participant_disconnected")
+    def _on_participant_disconnected(who) -> None:
+        # Close the room when the person leaves: the job shuts down (ending the avatar session) and
+        # the next "Start voice" for the same session gets a fresh room and a fresh agent.
+        if human_identity and who.identity == human_identity:
+            log.info("participant %s left; closing room %s", who.identity, ctx.room.name)
+            ctx.delete_room()
+
     await session.start(
         agent=Assistant(ctx.room, session_id, user_id),
         room=ctx.room,
@@ -110,7 +136,9 @@ async def entrypoint(ctx: JobContext) -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=settings.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=settings.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,

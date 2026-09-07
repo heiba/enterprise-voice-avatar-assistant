@@ -57,10 +57,12 @@ export function VoicePanel({ sessionId, userName, onAssistantTurn }: Props) {
 
   if (!connection) {
     return (
-      <div className="voice">
-        <button type="button" className="mic" onClick={start} disabled={starting}>
-          <span aria-hidden="true">🎙</span> {starting ? "Starting…" : "Start voice conversation"}
-        </button>
+      <div className="voice-stage">
+        <div className="avatar-frame avatar-idle">
+          <button type="button" className="mic" onClick={start} disabled={starting}>
+            <span aria-hidden="true">🎙</span> {starting ? "Starting…" : "Start voice conversation"}
+          </button>
+        </div>
         <span className="muted">
           Talk to the assistant. Voice and text share the same conversation, so it remembers what you asked here.
         </span>

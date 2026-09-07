@@ -26,6 +26,9 @@ ingestion:
   image: ghcr.io/heiba/assistant-ingestion:sha-1fdbdcb
 
 models:
+  tts:
+    # Male Kokoro voice to match the Tavus stock face (am_* US, bm_* UK are male voices).
+    voice: am_michael
   # The LLM, embeddings, and guardrails come from this chart. Whisper reuses the
   # model already served by OpenShift AI in the `whisper` namespace.
   stt:

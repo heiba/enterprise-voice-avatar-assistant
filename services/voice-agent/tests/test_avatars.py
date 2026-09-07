@@ -1,3 +1,6 @@
+import asyncio
+from types import SimpleNamespace
+
 import pytest
 
 from app import avatars
@@ -47,3 +50,20 @@ def test_start_kwargs_uses_public_livekit_url(monkeypatch):
     assert avatars.start_kwargs(Legacy()) == {}
     monkeypatch.setattr(settings, "livekit_public_url", None)
     assert avatars.start_kwargs(Provider()) == {}
+
+
+def test_stop_ends_tavus_conversation(monkeypatch):
+    monkeypatch.setattr(settings, "avatar_provider", "tavus")
+    monkeypatch.setattr(settings, "tavus_api_key", "k")
+    ended = []
+
+    async def fake_end(conversation_id, api_key):
+        ended.append((conversation_id, api_key))
+        return 200
+
+    monkeypatch.setattr(avatars, "_end_tavus_conversation", fake_end)
+    asyncio.run(avatars.stop(SimpleNamespace(conversation_id="c123")))
+    assert ended == [("c123", "k")]
+    asyncio.run(avatars.stop(SimpleNamespace(conversation_id=None)))
+    asyncio.run(avatars.stop(None))
+    assert ended == [("c123", "k")]

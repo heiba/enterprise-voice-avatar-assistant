@@ -164,9 +164,12 @@ def test_pending_keeps_newest_per_ticket(monkeypatch):
         return None
 
     monkeypatch.setattr(memory, "run", fake_run)
+    recorded = []
+    monkeypatch.setattr(memory, "append", lambda sid, role, text, **kw: recorded.append((sid, role, text)))
     pending = notifications.pending("s1")
     assert [n.text for n in pending] == ["fulfilled", "rejected"]
     assert acked == [("s1", [1])]
+    assert recorded == [("s1", "assistant", "fulfilled"), ("s1", "assistant", "rejected")]
 
 
 def test_notify_ticket_is_noop_without_session():

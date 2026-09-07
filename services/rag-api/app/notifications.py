@@ -40,7 +40,7 @@ def ticket_text(ticket: Ticket) -> str | None:
 
 
 def notify_ticket(ticket: Ticket) -> None:
-    """Queue a notice for the conversation that filed the ticket and keep it in the transcript."""
+    """Queue a notice for the conversation that filed the ticket."""
     if not ticket.session_id:
         return
     text = ticket_text(ticket)
@@ -51,7 +51,6 @@ def notify_ticket(ticket: Ticket) -> None:
         "INSERT INTO session_notifications (session_id, ticket_ref, kind, text) VALUES (%s, %s, 'ticket_update', %s)",
         (ticket.session_id, ticket.ticket_ref, text),
     )
-    memory.append(ticket.session_id, "assistant", text)
     log.info("notice queued for session %s: %s -> %s", ticket.session_id, ticket.ticket_ref, ticket.status)
 
 
@@ -74,7 +73,11 @@ def pending(session_id: str) -> list[Notification]:
         latest[key] = row
     if superseded:
         ack(session_id, superseded)
-    return [Notification(**row) for row in latest.values()]
+    notices = [Notification(**row) for row in latest.values()]
+    # The transcript records what the person actually saw or heard: only delivered notices.
+    for notice in notices:
+        memory.append(session_id, "assistant", notice.text)
+    return notices
 
 
 def ack(session_id: str, ids: list[int]) -> None:

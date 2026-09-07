@@ -1,0 +1,240 @@
+{{- if .Values.n8n.enabled }}
+{{- $fullname := include "n8n.name" . -}}
+{{- $labels := include "n8n.labels" . -}}
+{{- $selectorLabels := include "n8n.selectorLabels" . -}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- $labels | nindent 4 }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- $labels | nindent 4 }}
+type: Opaque
+data:
+  encryption-key: {{ .Values.n8n.encryptionKey | default "" | b64enc | quote }}
+  {{- if eq .Values.n8n.database.type "postgresdb" }}
+  db-password: {{ .Values.n8n.database.postgres.password | default "" | b64enc | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 5678
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- $selectorLabels | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  replicas: {{ .Values.n8n.replicas | default 1 }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- $selectorLabels | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $selectorLabels | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $fullname }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      terminationGracePeriodSeconds: {{ .Values.n8n.gracefulShutdownTimeout | default 30 }}
+      containers:
+        - name: n8n
+          image: "{{ .Values.n8n.image.repository }}:{{ .Values.n8n.image.tag }}"
+          imagePullPolicy: {{ .Values.n8n.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: 5678
+              protocol: TCP
+          env:
+            - name: N8N_PORT
+              value: "5678"
+            - name: N8N_HOST
+              value: "0.0.0.0"
+            - name: N8N_PROTOCOL
+              value: {{ .Values.n8n.protocol | default "https" | quote }}
+            - name: N8N_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}
+                  key: encryption-key
+            - name: N8N_USER_FOLDER
+              value: "/home/node"
+            - name: N8N_EDITOR_BASE_URL
+              value: {{ .Values.n8n.editorBaseUrl | default (printf "https://%s.%s/" $fullname .Values.cluster.appsDomain) | quote }}
+            - name: N8N_WEBHOOK_URL
+              value: {{ .Values.n8n.webhookUrl | default (printf "https://%s.%s/" $fullname .Values.cluster.appsDomain) | quote }}
+            {{- if .Values.n8n.timezone }}
+            - name: GENERIC_TIMEZONE
+              value: {{ .Values.n8n.timezone | quote }}
+            - name: TZ
+              value: {{ .Values.n8n.timezone | quote }}
+            {{- end }}
+            - name: N8N_DIAGNOSTICS_ENABLED
+              value: {{ .Values.n8n.diagnosticsEnabled | default false | quote }}
+            - name: N8N_TEMPLATES_ENABLED
+              value: {{ .Values.n8n.templatesEnabled | default true | quote }}
+            - name: N8N_PUSH_BACKEND
+              value: {{ .Values.n8n.pushBackend | default "websocket" | quote }}
+            - name: N8N_PAYLOAD_SIZE_MAX
+              value: {{ .Values.n8n.payloadSizeMaxMb | default 16 | quote }}
+            - name: N8N_SECURE_COOKIE
+              value: {{ .Values.n8n.secureCookie | default true | quote }}
+            - name: DB_TYPE
+              value: {{ .Values.n8n.database.type | default "sqlite" | quote }}
+            {{- if eq .Values.n8n.database.type "postgresdb" }}
+            - name: DB_POSTGRESDB_HOST
+              value: {{ .Values.n8n.database.postgres.host | quote }}
+            - name: DB_POSTGRESDB_PORT
+              value: {{ .Values.n8n.database.postgres.port | default 5432 | quote }}
+            - name: DB_POSTGRESDB_DATABASE
+              value: {{ .Values.n8n.database.postgres.database | default "n8n" | quote }}
+            - name: DB_POSTGRESDB_USER
+              value: {{ .Values.n8n.database.postgres.user | default "n8n" | quote }}
+            - name: DB_POSTGRESDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}
+                  key: db-password
+            - name: DB_POSTGRESDB_SCHEMA
+              value: {{ .Values.n8n.database.postgres.schema | default "public" | quote }}
+            - name: DB_POSTGRESDB_POOL_SIZE
+              value: {{ .Values.n8n.database.postgres.poolSize | default 2 | quote }}
+            {{- if .Values.n8n.database.postgres.ssl.enabled }}
+            - name: DB_POSTGRESDB_SSL_ENABLED
+              value: "true"
+            - name: DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED
+              value: {{ .Values.n8n.database.postgres.ssl.rejectUnauthorized | default true | quote }}
+            {{- end }}
+            {{- end }}
+            {{- range .Values.n8n.extraEnv }}
+            - name: {{ .name }}
+              {{- if .value }}
+              value: {{ .value | quote }}
+              {{- else if .valueFrom }}
+              valueFrom:
+                {{- toYaml .valueFrom | nindent 16 }}
+              {{- end }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            {{- toYaml .Values.n8n.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: n8n-data
+              mountPath: /home/node/.n8n
+      volumes:
+        - name: n8n-data
+          {{- if .Values.n8n.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ $fullname }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.n8n.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.n8n.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.n8n.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- if .Values.n8n.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullname }}-data
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.n8n.persistence.accessMode | default "ReadWriteOnce" }}
+  {{- if .Values.n8n.persistence.storageClass }}
+  storageClassName: {{ .Values.n8n.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.n8n.persistence.size | default "5Gi" }}
+{{- end }}
+---
+{{- if .Values.n8n.route.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- $labels | nindent 4 }}
+  {{- with .Values.n8n.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  host: {{ .Values.n8n.route.host | default (printf "%s.%s" $fullname .Values.cluster.appsDomain) }}
+  port:
+    targetPort: http
+  to:
+    kind: Service
+    name: {{ $fullname }}
+    weight: 100
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}
+{{- end }}

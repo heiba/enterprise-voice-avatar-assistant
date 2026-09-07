@@ -1,0 +1,293 @@
+{{- $fullname := include "qdrant.fullname" . -}}
+{{- $labels := include "qdrant.labels" . -}}
+{{- $selectorLabels := include "qdrant.selectorLabels" . -}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- $labels | nindent 4 }}
+  {{- with .Values.qdrant.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $fullname }}-apikey
+  labels:
+    {{- $labels | nindent 4 }}
+type: Opaque
+data:
+  api-key: {{ .Values.qdrant.apiKey | default "" | b64enc | quote }}
+  {{- if .Values.qdrant.readOnlyApiKey }}
+  read-only-api-key: {{ .Values.qdrant.readOnlyApiKey | b64enc | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-config
+  labels:
+    {{- $labels | nindent 4 }}
+data:
+  production.yaml: |
+    log_level: {{ .Values.qdrant.config.logLevel | default "INFO" }}
+
+    storage:
+      storage_path: /qdrant/storage
+      snapshots_path: /qdrant/snapshots
+      on_disk_payload: {{ .Values.qdrant.config.onDiskPayload | default true }}
+      wal:
+        wal_capacity_mb: {{ .Values.qdrant.config.wal.capacityMb | default 32 }}
+        wal_segments_ahead: {{ .Values.qdrant.config.wal.segmentsAhead | default 0 }}
+      optimizers:
+        default_segment_number: {{ .Values.qdrant.config.optimizers.defaultSegmentNumber | default 0 }}
+        indexing_threshold_kb: {{ .Values.qdrant.config.optimizers.indexingThresholdKb | default 10000 }}
+        flush_interval_sec: {{ .Values.qdrant.config.optimizers.flushIntervalSec | default 5 }}
+      hnsw_index:
+        m: {{ .Values.qdrant.config.hnswIndex.m | default 16 }}
+        ef_construct: {{ .Values.qdrant.config.hnswIndex.efConstruct | default 100 }}
+        on_disk: {{ .Values.qdrant.config.hnswIndex.onDisk | default false }}
+      performance:
+        max_search_threads: {{ .Values.qdrant.config.performance.maxSearchThreads | default 0 }}
+
+    service:
+      host: 0.0.0.0
+      http_port: 6333
+      grpc_port: 6334
+      max_request_size_mb: {{ .Values.qdrant.config.maxRequestSizeMb | default 32 }}
+      enable_cors: {{ .Values.qdrant.config.enableCors | default true }}
+      enable_tls: {{ .Values.qdrant.tls.enabled | default false }}
+
+    {{- if gt (int .Values.qdrant.replicas) 1 }}
+    cluster:
+      enabled: true
+      p2p:
+        port: 6335
+        enable_tls: {{ .Values.qdrant.tls.enabled | default false }}
+      consensus:
+        tick_period_ms: {{ .Values.qdrant.config.cluster.tickPeriodMs | default 100 }}
+    {{- end }}
+
+    {{- if .Values.qdrant.tls.enabled }}
+    tls:
+      cert: /qdrant/tls/tls.crt
+      key: /qdrant/tls/tls.key
+    {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: http
+      port: 6333
+      targetPort: http
+      protocol: TCP
+    - name: grpc
+      port: 6334
+      targetPort: grpc
+      protocol: TCP
+    - name: p2p
+      port: 6335
+      targetPort: p2p
+      protocol: TCP
+  selector:
+    {{- $selectorLabels | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  replicas: {{ .Values.qdrant.replicas | default 1 }}
+  serviceName: {{ $fullname }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- $selectorLabels | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $selectorLabels | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print .Template.BasePath "/qdrant.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ $fullname }}
+      securityContext:
+        runAsNonRoot: true
+        {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }}
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+        {{- end }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: qdrant
+          image: "{{ .Values.qdrant.image.repository }}:{{ .Values.qdrant.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.qdrant.image.pullPolicy | default "IfNotPresent" }}
+          command:
+            - ./qdrant
+            - --config-path
+            - /qdrant/config/production.yaml
+          ports:
+            - name: http
+              containerPort: 6333
+              protocol: TCP
+            - name: grpc
+              containerPort: 6334
+              protocol: TCP
+            - name: p2p
+              containerPort: 6335
+              protocol: TCP
+          env:
+            {{- if .Values.qdrant.apiKey }}
+            - name: QDRANT__SERVICE__API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}-apikey
+                  key: api-key
+            {{- end }}
+            {{- if .Values.qdrant.readOnlyApiKey }}
+            - name: QDRANT__SERVICE__READ_ONLY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullname }}-apikey
+                  key: read-only-api-key
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            {{- toYaml .Values.qdrant.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: qdrant-storage
+              mountPath: /qdrant/storage
+            - name: qdrant-config
+              mountPath: /qdrant/config
+            {{- if .Values.qdrant.snapshots.enabled }}
+            - name: qdrant-snapshots
+              mountPath: /qdrant/snapshots
+            {{- end }}
+            {{- if .Values.qdrant.tls.enabled }}
+            - name: qdrant-tls
+              mountPath: /qdrant/tls
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: qdrant-config
+          configMap:
+            name: {{ $fullname }}-config
+        {{- if .Values.qdrant.tls.enabled }}
+        - name: qdrant-tls
+          secret:
+            secretName: {{ .Values.qdrant.tls.secretName | default (printf "%s-tls" $fullname) }}
+        {{- end }}
+      {{- with .Values.qdrant.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.qdrant.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.qdrant.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: qdrant-storage
+        labels:
+          {{- $selectorLabels | nindent 10 }}
+      spec:
+        accessModes:
+          - {{ .Values.qdrant.persistence.accessMode | default "ReadWriteOnce" }}
+        {{- if .Values.qdrant.persistence.storageClass }}
+        storageClassName: {{ .Values.qdrant.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.qdrant.persistence.size | default "10Gi" }}
+    {{- if .Values.qdrant.snapshots.enabled }}
+    - metadata:
+        name: qdrant-snapshots
+        labels:
+          {{- $selectorLabels | nindent 10 }}
+      spec:
+        accessModes:
+          - {{ .Values.qdrant.snapshots.accessMode | default "ReadWriteOnce" }}
+        {{- if .Values.qdrant.snapshots.storageClass }}
+        storageClassName: {{ .Values.qdrant.snapshots.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.qdrant.snapshots.size | default "10Gi" }}
+    {{- end }}
+---
+{{- if .Values.qdrant.route.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- $labels | nindent 4 }}
+  {{- with .Values.qdrant.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  host: {{ .Values.qdrant.route.host | default (printf "%s.%s" $fullname .Values.cluster.appsDomain) }}
+  port:
+    targetPort: http
+  to:
+    kind: Service
+    name: {{ $fullname }}
+    weight: 100
+  {{- if .Values.qdrant.tls.enabled }}
+  tls:
+    termination: passthrough
+  {{- else }}
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  {{- end }}
+{{- end }}

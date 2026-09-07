@@ -1,4 +1,10 @@
 ---
+# -- OpenShift cluster configuration --
+# Shared across all components. Change this when targeting a different cluster.
+cluster:
+  apiUrl: https://api.ocp.6s896.sandbox2112.opentlc.com:6443
+  appsDomain: apps.ocp.6s896.sandbox2112.opentlc.com
+
 # LLM configuration (optional)
 # Only needed if your quickstart requires a model.
 #
@@ -14,7 +20,172 @@
 # Add your own InferenceService template under templates/ for this.
 model: {}
 
-# -- Add your quickstart-specific values below --
-# app:
-#   replicas: 1
-#   image: quay.io/my-org/my-app:latest
+# -- Qdrant vector database configuration --
+qdrant:
+  # Number of replicas. >1 enables distributed cluster mode automatically.
+  replicas: 1
+
+  image:
+    repository: docker.io/qdrant/qdrant
+    tag: "v1.19.1"
+    pullPolicy: IfNotPresent
+
+  # API key for authentication (leave empty to disable auth)
+  apiKey: ""
+  # Read-only API key (optional, leave empty to disable)
+  readOnlyApiKey: ""
+
+  serviceAccount:
+    annotations: {}
+
+  # Resource requests and limits
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+  # Persistent storage for Qdrant data (uses volumeClaimTemplates)
+  # NFS and S3 are NOT supported — use block storage (SSD/NVMe recommended)
+  persistence:
+    size: 10Gi
+    accessMode: ReadWriteOnce
+    # storageClass: ""  # leave empty to use the cluster default
+
+  # Snapshot storage (optional separate volume)
+  snapshots:
+    enabled: false
+    size: 10Gi
+    accessMode: ReadWriteOnce
+    # storageClass: ""
+
+  # TLS configuration
+  tls:
+    enabled: false
+    # Name of an existing TLS secret (must contain tls.crt and tls.key)
+    # secretName: ""
+
+  # OpenShift Route
+  route:
+    enabled: true
+    annotations: {}
+
+  # Service type (headless ClusterIP is used for StatefulSet by default)
+  service:
+    type: ClusterIP
+
+  # Qdrant engine configuration (maps to production.yaml)
+  config:
+    logLevel: INFO
+    onDiskPayload: true
+    maxRequestSizeMb: 32
+    enableCors: true
+
+    wal:
+      capacityMb: 32
+      segmentsAhead: 0
+
+    optimizers:
+      defaultSegmentNumber: 0
+      indexingThresholdKb: 10000
+      flushIntervalSec: 5
+
+    hnswIndex:
+      m: 16
+      efConstruct: 100
+      onDisk: false
+
+    performance:
+      maxSearchThreads: 0
+
+    cluster:
+      tickPeriodMs: 100
+
+  # Node scheduling
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# -- n8n workflow automation configuration --
+n8n:
+  enabled: true
+
+  replicas: 1
+
+  image:
+    repository: docker.io/n8nio/n8n
+    tag: "1.97.1"
+    pullPolicy: IfNotPresent
+
+  # IMPORTANT: set a stable encryption key — n8n uses it to encrypt credentials.
+  # If this changes, existing credentials become unreadable.
+  # Generate one with: openssl rand -hex 32
+  encryptionKey: ""
+
+  # Protocol used for public-facing URLs (edge-terminated TLS on OpenShift = https)
+  protocol: https
+
+  # Public URLs — automatically derived from cluster.appsDomain in the template.
+  # Override here only if you need a custom URL.
+  # webhookUrl: ""
+  # editorBaseUrl: ""
+
+  # Timezone for scheduled workflow triggers
+  # timezone: "UTC"
+
+  # Telemetry
+  diagnosticsEnabled: false
+  templatesEnabled: true
+  pushBackend: websocket
+  payloadSizeMaxMb: 16
+  secureCookie: true
+  gracefulShutdownTimeout: 30
+
+  # Database — sqlite (default, data on PVC) or postgresdb (production recommended)
+  database:
+    type: sqlite
+    postgres:
+      host: ""
+      port: 5432
+      database: n8n
+      user: n8n
+      password: ""
+      schema: public
+      poolSize: 2
+      ssl:
+        enabled: false
+        rejectUnauthorized: true
+
+  # Extra environment variables
+  # extraEnv:
+  #   - name: N8N_BLOCK_ENV_ACCESS_IN_NODE
+  #     value: "true"
+  extraEnv: []
+
+  # Resource requests and limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  # Persistent storage for n8n data directory (/home/node/.n8n)
+  persistence:
+    enabled: true
+    size: 5Gi
+    accessMode: ReadWriteOnce
+    # storageClass: ""  # leave empty to use the cluster default
+
+  # OpenShift Route
+  route:
+    enabled: true
+    annotations: {}
+
+  # Node scheduling
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}

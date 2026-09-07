@@ -16,6 +16,7 @@ spec:
       labels:
         {{- include "assistant.componentLabels" (dict "root" . "name" "frontend") | nindent 8 }}
     spec:
+      enableServiceLinks: false
       containers:
         - name: frontend
           image: {{ include "assistant.image" (dict "root" . "name" "frontend" "override" .Values.frontend.image) }}

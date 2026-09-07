@@ -37,6 +37,7 @@ spec:
       labels:
         {{- include "assistant.componentLabels" (dict "root" . "name" "minio") | nindent 8 }}
     spec:
+      enableServiceLinks: false
       containers:
         - name: minio
           image: {{ .Values.minio.image }}
@@ -148,6 +149,7 @@ spec:
       labels:
         {{- include "assistant.componentLabels" (dict "root" . "name" "minio-setup") | nindent 8 }}
     spec:
+      enableServiceLinks: false
       restartPolicy: OnFailure
       containers:
         - name: mc

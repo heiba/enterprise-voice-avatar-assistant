@@ -37,6 +37,7 @@ spec:
       labels:
         {{- include "assistant.componentLabels" (dict "root" . "name" "n8n") | nindent 8 }}
     spec:
+      enableServiceLinks: false
       containers:
         - name: n8n
           image: {{ .Values.n8n.image }}

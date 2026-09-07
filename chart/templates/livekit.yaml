@@ -43,6 +43,7 @@ spec:
       annotations:
         checksum/config: {{ toYaml .Values.livekit | sha256sum | trunc 16 }}
     spec:
+      enableServiceLinks: false
       containers:
         - name: livekit
           image: {{ .Values.livekit.image }}

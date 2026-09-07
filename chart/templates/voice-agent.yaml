@@ -17,6 +17,7 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 16 }}
     spec:
+      enableServiceLinks: false
       terminationGracePeriodSeconds: 60
       containers:
         - name: voice-agent

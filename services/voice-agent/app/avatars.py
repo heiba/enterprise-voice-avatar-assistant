@@ -38,13 +38,24 @@ def build() -> Any | None:
             )
         )
     if name == "tavus":
+        import inspect
+
         from livekit.plugins import tavus
 
-        return tavus.AvatarSession(
-            replica_id=_require(settings.tavus_replica_id, "TAVUS_REPLICA_ID"),
-            persona_id=settings.tavus_persona_id,
-            api_key=_require(settings.tavus_api_key, "TAVUS_API_KEY"),
-        )
+        face_id = _require(settings.tavus_face_id or settings.tavus_replica_id, "TAVUS_FACE_ID")
+        pal_id = settings.tavus_pal_id or settings.tavus_persona_id
+        api_key = _require(settings.tavus_api_key, "TAVUS_API_KEY")
+        # Tavus renamed replicas to faces and personas to PALs; support both plugin generations.
+        params = inspect.signature(tavus.AvatarSession.__init__).parameters
+        if "face_id" in params:
+            kwargs: dict[str, Any] = {"face_id": face_id, "api_key": api_key}
+            if pal_id:
+                kwargs["pal_id"] = pal_id
+        else:
+            kwargs = {"replica_id": face_id, "api_key": api_key}
+            if pal_id:
+                kwargs["persona_id"] = pal_id
+        return tavus.AvatarSession(**kwargs)
     if name == "hedra":
         from livekit.plugins import hedra
 

@@ -30,6 +30,7 @@ images:
 #   livekit:      LIVEKIT_API_KEY, LIVEKIT_API_SECRET
 #   models:       LLM_API_KEY, STT_API_KEY, TTS_API_KEY, EMBEDDINGS_API_KEY, GUARDRAILS_API_KEY, HF_TOKEN
 #   integrations: SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, SIMLI_API_KEY, SIMLI_FACE_ID,
+#                 TAVUS_API_KEY, TAVUS_FACE_ID, TAVUS_PAL_ID (optional),
 #                 ELEVENLABS_API_KEY, GOOGLE_SERVICE_ACCOUNT_JSON
 secrets:
   postgres: assistant-postgres
@@ -311,7 +312,7 @@ voiceAgent:
   enabled: true
   image: ""
   replicas: 1
-  # none | simli | heygen | tavus
+  # none | simli | tavus | hedra (see services/voice-agent/app/avatars.py)
   avatarProvider: none
   resources:
     requests:

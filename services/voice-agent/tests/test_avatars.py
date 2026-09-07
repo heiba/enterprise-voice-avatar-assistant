@@ -20,3 +20,14 @@ def test_simli_requires_credentials(monkeypatch):
     monkeypatch.setattr(settings, "simli_api_key", None)
     with pytest.raises(RuntimeError, match="SIMLI_API_KEY"):
         avatars.build()
+
+
+def test_tavus_requires_face_and_key(monkeypatch):
+    monkeypatch.setattr(settings, "avatar_provider", "tavus")
+    for field in ("tavus_face_id", "tavus_replica_id", "tavus_api_key"):
+        monkeypatch.setattr(settings, field, None)
+    with pytest.raises(RuntimeError, match="TAVUS_FACE_ID"):
+        avatars.build()
+    monkeypatch.setattr(settings, "tavus_replica_id", "r3f4182ef554")  # old name still accepted
+    with pytest.raises(RuntimeError, match="TAVUS_API_KEY"):
+        avatars.build()

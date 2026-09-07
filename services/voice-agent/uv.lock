@@ -556,6 +556,18 @@ wheels = [
 ]
 
 [[package]]
+name = "livekit-plugins-tavus"
+version = "1.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "livekit-agents" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b9/ee/0c83c6e2a0e31175905075b980063d48e0228d6a1541364bcd291a6dfc92/livekit_plugins_tavus-1.8.0.tar.gz", hash = "sha256:2748a654bc06216162f86b439f265a14235d83aaa15d67e8d8aaf017a534cb97", size = 6281 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/58/1f/bec1383e7d5a70ff4ccbce0954fd67077956300854e5a478605c222217e0/livekit_plugins_tavus-1.8.0-py3-none-any.whl", hash = "sha256:e06de0d91a624719467fbd8fa9db49e4b5e9784f3f389b07e718c40c75873665", size = 6922 },
+]
+
+[[package]]
 name = "livekit-protocol"
 version = "1.1.26"
 source = { registry = "https://pypi.org/simple" }
@@ -1201,6 +1213,7 @@ dependencies = [
     { name = "livekit-plugins-openai" },
     { name = "livekit-plugins-silero" },
     { name = "livekit-plugins-simli" },
+    { name = "livekit-plugins-tavus" },
     { name = "openai" },
     { name = "pydantic-settings" },
 ]
@@ -1220,6 +1233,7 @@ requires-dist = [
     { name = "livekit-plugins-openai", specifier = ">=1.8,<2" },
     { name = "livekit-plugins-silero", specifier = ">=1.8,<2" },
     { name = "livekit-plugins-simli", specifier = ">=1.8,<2" },
+    { name = "livekit-plugins-tavus", specifier = ">=1.8,<2" },
     { name = "openai", specifier = ">=1.50" },
     { name = "pydantic-settings", specifier = ">=2.5" },
 ]

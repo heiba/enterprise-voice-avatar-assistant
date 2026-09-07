@@ -43,9 +43,12 @@ class Settings(BaseSettings):
     avatar_provider: str = "none"
     simli_api_key: str | None = None
     simli_face_id: str | None = None
+    tavus_api_key: str | None = None
+    tavus_face_id: str | None = None  # stock or custom face, e.g. r3f4182ef554
+    tavus_pal_id: str | None = None  # optional; the plugin's stock PAL is used when empty
+    # Older Tavus names (replica -> face, persona -> PAL); still accepted
     tavus_replica_id: str | None = None
     tavus_persona_id: str | None = None
-    tavus_api_key: str | None = None
     hedra_api_key: str | None = None
     hedra_avatar_image: str | None = None
 

@@ -70,6 +70,9 @@ make_secret assistant-integrations \
   --from-literal=SLACK_SIGNING_SECRET="${SLACK_SIGNING_SECRET:-}" \
   --from-literal=SIMLI_API_KEY="${SIMLI_API_KEY:-}" \
   --from-literal=SIMLI_FACE_ID="${SIMLI_FACE_ID:-}" \
+  --from-literal=TAVUS_API_KEY="${TAVUS_API_KEY:-}" \
+  --from-literal=TAVUS_FACE_ID="${TAVUS_FACE_ID:-}" \
+  --from-literal=TAVUS_PAL_ID="${TAVUS_PAL_ID:-}" \
   --from-literal=ELEVENLABS_API_KEY="${ELEVENLABS_API_KEY:-}" \
   --from-literal=GOOGLE_SERVICE_ACCOUNT_JSON="${GOOGLE_SERVICE_ACCOUNT_JSON:-}"
 

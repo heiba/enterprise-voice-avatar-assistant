@@ -84,7 +84,7 @@ flowchart LR
     GR[Guardrails<br/>TrustyAI / Llama Guard]
   end
   subgraph External["External integrations (optional)"]
-    AV[Avatar provider<br/>Simli / HeyGen / Tavus]
+    AV[Avatar provider<br/>Tavus / Simli / Hedra]
     EL[ElevenLabs TTS]
     SL[Slack]
     GD[Google Docs]
@@ -145,7 +145,7 @@ Models served on OpenShift AI, only if you deploy them with the chart instead of
 - A default StorageClass that supports ReadWriteOnce volumes
 - Client tools: `oc` 4.16 or later and `helm` 3.14 or later
 - Optional: the OpenShift GitOps operator (Argo CD) for the GitOps deployment path
-- Optional external services: a Slack workspace with a bot token, a Google Cloud project with the Docs and Drive APIs enabled, an avatar provider account (Simli, HeyGen, or Tavus), and ElevenLabs
+- Optional external services: a Slack workspace with a bot token, a Google Cloud project with the Docs and Drive APIs enabled, an avatar provider account (Tavus, Simli, or Hedra), and ElevenLabs
 
 Tested version combinations will be recorded here once validation runs complete.
 

@@ -121,6 +121,8 @@ n8n:
 livekit:
   enabled: true
   image: docker.io/livekit/livekit-server:v1.13.6
+  # LiveKit server log level: debug shows TURN allocations and ICE candidate pairs.
+  logLevel: info
   # Public hostname for the WebSocket signaling Route. Computed from global.domain when empty.
   publicHost: ""
   # WebRTC media cannot pass through an HTTP Route. On OpenShift the practical

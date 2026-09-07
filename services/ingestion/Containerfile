@@ -12,8 +12,14 @@ ENV UV_CACHE_DIR=/tmp/uv-cache \
 WORKDIR /opt/app-root/src
 
 COPY --chown=1001:0 pyproject.toml uv.lock ./
+# rapidocr (Docling's OCR engine) pulls in opencv-python, whose wheel needs libGL.so.1,
+# absent from the UBI image; swap it for the headless build, which has no GUI deps.
 RUN pip install --no-cache-dir uv \
  && uv sync --frozen --no-dev \
+ && OPENCV_VERSION="$(.venv/bin/python -c 'import importlib.metadata as m; print(m.version("opencv-python"))')" \
+ && uv pip uninstall --python .venv/bin/python opencv-python \
+ && uv pip install --python .venv/bin/python "opencv-python-headless==${OPENCV_VERSION}" \
+ && .venv/bin/python -c "import cv2; print('cv2', cv2.__version__)" \
  && rm -rf /tmp/uv-cache
 
 # Docling layout and table models plus the chunker tokenizer.

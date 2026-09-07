@@ -15,7 +15,10 @@ NS="${NS:-$(oc project -q)}"
 MC_IMAGE="${MC_IMAGE:-$(sed -n 's/^  mcImage: *//p' "$ROOT/chart/values.yaml")}"
 POD="sample-docs-upload"
 cd "$ROOT/data/sample-docs"
-FILES=("$@"); [ ${#FILES[@]} -gt 0 ] || FILES=( *.md *.docx *.pdf )
+FILES=("$@")
+if [ ${#FILES[@]} -eq 0 ]; then
+  for f in *.md *.docx *.pdf; do [ "$f" = README.md ] || FILES+=("$f"); done
+fi
 
 oc apply -n "$NS" -f - >/dev/null <<YAML
 apiVersion: v1

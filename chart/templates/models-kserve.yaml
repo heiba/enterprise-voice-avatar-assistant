@@ -6,6 +6,21 @@ mode, modelcar or Hugging Face storageUri, port 8080).
 {{- range $key := list "llm" "stt" "embeddings" "guardrails" }}
 {{- $m := index $.Values.models $key }}
 {{- if $m.deploy }}
+{{- $template := "" }}
+{{- if $m.chatTemplateFile }}
+{{- $template = $.Files.Get $m.chatTemplateFile }}
+{{- if not $template }}{{ fail (printf "models.%s.chatTemplateFile %s not found in the chart" $key $m.chatTemplateFile) }}{{ end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $m.name }}-chat-template
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" $ "name" (printf "model-%s" $key)) | nindent 4 }}
+data:
+  chat_template.jinja: |-
+{{ $template | indent 4 }}
+{{- end }}
 ---
 apiVersion: serving.kserve.io/v1alpha1
 kind: ServingRuntime
@@ -53,6 +68,9 @@ metadata:
     {{- include "assistant.componentLabels" (dict "root" $ "name" (printf "model-%s" $key)) | nindent 4 }}
   annotations:
     openshift.io/display-name: {{ $m.displayName }}
+    {{- if $template }}
+    checksum/chat-template: {{ $template | sha256sum | trunc 16 }}
+    {{- end }}
     serving.kserve.io/deploymentMode: Standard
     serving.kserve.io/autoscalerClass: external
     security.opendatahub.io/enable-auth: "false"
@@ -70,11 +88,28 @@ spec:
         name: vLLM
       runtime: {{ $m.name }}
       storageUri: {{ $m.storageUri | quote }}
-      {{- with $m.args }}
+      {{- if or $m.args $template }}
       args:
-        {{- toYaml . | nindent 8 }}
+        {{- range $m.args }}
+        - {{ . | quote }}
+        {{- end }}
+        {{- if $template }}
+        - --chat-template=/mnt/chat-template/chat_template.jinja
+        {{- end }}
+      {{- end }}
+      {{- if $template }}
+      volumeMounts:
+        - name: chat-template
+          mountPath: /mnt/chat-template
+          readOnly: true
       {{- end }}
       resources:
         {{- toYaml $m.resources | nindent 8 }}
+    {{- if $template }}
+    volumes:
+      - name: chat-template
+        configMap:
+          name: {{ $m.name }}-chat-template
+    {{- end }}
 {{- end }}
 {{- end }}

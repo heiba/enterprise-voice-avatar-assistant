@@ -18,7 +18,9 @@ models:
   # model already served by OpenShift AI in the `whisper` namespace.
   stt:
     deploy: false
-    endpoint: http://redhataiwhisper-large-v3-turbo-kserve-workload-svc.whisper.svc.cluster.local:8000/v1
+    # LLMInferenceService workloads serve TLS with a certificate from the
+    # OpenShift service CA, which every pod trusts through SERVICE_CA_FILE.
+    endpoint: https://redhataiwhisper-large-v3-turbo-kserve-workload-svc.whisper.svc.cluster.local:8000/v1
     servedModelName: redhataiwhisper-large-v3-turbo
   guardrails:
     provider: granite-guardian

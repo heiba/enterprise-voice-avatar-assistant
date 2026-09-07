@@ -222,6 +222,9 @@ models:
     displayName: Granite Guardian 3.3 8B
     servedModelName: granite-guardian-3.3-8b
     storageUri: oci://quay.io/redhat-ai-services/modelcar-catalog:granite-guardian-3.3-8b
+    # The modelcar ships no chat template and vLLM refuses to guess one, so the
+    # official template from the model's Hugging Face repo is mounted from chart/files.
+    chatTemplateFile: files/granite-guardian-3.3-chat-template.jinja
     args:
       - --max-model-len=8192
       - --gpu-memory-utilization=0.90

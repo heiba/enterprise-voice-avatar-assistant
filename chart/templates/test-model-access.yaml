@@ -25,6 +25,12 @@ spec:
             secretKeyRef:
               name: {{ .Values.secrets.models }}
               key: LLM_API_KEY
+        - name: STT_BASE_URL
+          value: {{ include "assistant.modelEndpoint" (dict "root" . "key" "stt") | quote }}
+        - name: EMBEDDINGS_BASE_URL
+          value: {{ include "assistant.modelEndpoint" (dict "root" . "key" "embeddings") | quote }}
+        - name: CA
+          value: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
       command:
         - /bin/sh
         - -c
@@ -33,8 +39,10 @@ spec:
           failed=0
           check() {
             name="$1"; url="$2"
-            if curl -sf --max-time 10 "$url" >/dev/null; then echo "OK      $name"; else echo "FAILED  $name ($url)"; failed=1; fi
+            if curl -sf --max-time 20 --cacert "$CA" "$url" >/dev/null; then echo "OK      $name"; else echo "FAILED  $name ($url)"; failed=1; fi
           }
+          [ -n "$STT_BASE_URL" ] && check stt-models "$STT_BASE_URL/models"
+          [ -n "$EMBEDDINGS_BASE_URL" ] && check embeddings-models "$EMBEDDINGS_BASE_URL/models"
           {{- if .Values.qdrant.enabled }}
           check qdrant http://qdrant:6333/readyz
           {{- end }}
@@ -57,7 +65,7 @@ spec:
           check tts http://tts:8880/v1/models
           {{- end }}
           if [ -n "$LLM_BASE_URL" ]; then
-            if curl -sf --max-time 60 -H "Authorization: Bearer $LLM_API_KEY" -H "Content-Type: application/json" \
+            if curl -sf --max-time 60 --cacert "$CA" -H "Authorization: Bearer $LLM_API_KEY" -H "Content-Type: application/json" \
               -d "{\"model\": \"$LLM_MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in one word.\"}], \"max_tokens\": 10}" \
               "$LLM_BASE_URL/chat/completions" >/dev/null; then echo "OK      llm chat completion"; else echo "FAILED  llm chat completion ($LLM_BASE_URL)"; failed=1; fi
           fi

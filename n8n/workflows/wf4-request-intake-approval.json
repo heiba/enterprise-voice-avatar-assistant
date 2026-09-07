@@ -130,7 +130,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json.body && $input.first().json.body.payload;\nconst p = typeof raw === 'string' ? JSON.parse(raw) : (raw || $input.first().json);\nconst a = (p.actions && p.actions[0]) || {};\nconst decision = a.action_id === 'approve_request' ? 'approved' : 'rejected';\nconst actor = (p.user && (p.user.username || p.user.name)) || 'slack';\nreturn [{ json: { ticket_ref: a.value, decision, actor, response_url: p.response_url || '' } }];"
+        "jsCode": "const raw = $input.first().json.body && $input.first().json.body.payload;\nconst p = typeof raw === 'string' ? JSON.parse(raw) : (raw || $input.first().json);\nconst a = (p.actions && p.actions[0]) || {};\nconst decision = a.action_id === 'approve_request' ? 'approved' : 'rejected';\nconst actor = (p.user && (p.user.username || p.user.name)) || 'slack';\n// Keep the original card (without its buttons) and add the decision underneath.\nconst blocks = ((p.message && p.message.blocks) || []).filter(b => b.type !== 'actions');\nconst done = decision === 'approved' ? ' and fulfilled' : '';\nconst icon = decision === 'approved' ? ':white_check_mark:' : ':x:';\nconst text = `Request ${a.value} ${decision}${done} by ${actor}`;\nblocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `${icon} *${decision}*${done} by ${actor}` }] });\nconst update_body = JSON.stringify({ replace_original: true, text, blocks });\nreturn [{ json: { ticket_ref: a.value, decision, actor, response_url: p.response_url || '', update_body } }];"
       },
       "id": "b48de297-50a7-534b-bf85-29fd3df2fcad",
       "name": "Parse Slack action",
@@ -269,7 +269,7 @@
         "options": {},
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ replace_original: true, text: 'Request ' + $json.ticket_ref + ' ' + $json.status + ' by ' + $('Parse Slack action').first().json.actor }) }}"
+        "jsonBody": "={{ $('Parse Slack action').first().json.update_body }}"
       },
       "id": "eae35b1e-fd46-569b-9007-08c9ab2691c0",
       "name": "Update Slack message",

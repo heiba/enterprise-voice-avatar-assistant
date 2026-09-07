@@ -72,18 +72,32 @@ def pending(session_id: str) -> list[Notification]:
             superseded.append(int(latest[key]["id"]))
         latest[key] = row
     if superseded:
-        ack(session_id, superseded)
-    notices = [Notification(**row) for row in latest.values()]
-    # The transcript records what the person actually saw or heard: only delivered notices.
-    for notice in notices:
-        memory.append(session_id, "assistant", notice.text)
-    return notices
+        _mark_delivered(session_id, superseded)
+    return [Notification(**row) for row in latest.values()]
 
 
 def ack(session_id: str, ids: list[int]) -> None:
+    """Mark notices delivered. The transcript records what the person actually saw or heard, so the
+    line is written here, once, and not for superseded notices."""
+    if not ids:
+        return
+    rows = (
+        memory.run(
+            "SELECT id, text FROM session_notifications WHERE session_id = %s AND id = ANY(%s) AND delivered_at IS NULL ORDER BY id",
+            (session_id, [int(i) for i in ids]),
+            fetch=True,
+        )
+        or []
+    )
+    for row in rows:
+        memory.append(session_id, "assistant", row["text"])
+    _mark_delivered(session_id, [int(row["id"]) for row in rows])
+
+
+def _mark_delivered(session_id: str, ids: list[int]) -> None:
     if not ids:
         return
     memory.run(
         "UPDATE session_notifications SET delivered_at = now() WHERE session_id = %s AND id = ANY(%s) AND delivered_at IS NULL",
-        (session_id, [int(i) for i in ids]),
+        (session_id, ids),
     )

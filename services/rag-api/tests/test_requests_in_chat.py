@@ -168,8 +168,25 @@ def test_pending_keeps_newest_per_ticket(monkeypatch):
     monkeypatch.setattr(memory, "append", lambda sid, role, text, **kw: recorded.append((sid, role, text)))
     pending = notifications.pending("s1")
     assert [n.text for n in pending] == ["fulfilled", "rejected"]
-    assert acked == [("s1", [1])]
-    assert recorded == [("s1", "assistant", "fulfilled"), ("s1", "assistant", "rejected")]
+    assert acked == [("s1", [1])]  # the superseded notice is marked delivered without a transcript line
+    assert recorded == []
+
+
+def test_ack_writes_transcript_once(monkeypatch):
+    now = datetime.now(UTC)
+    calls = []
+
+    def fake_run(query, params=(), fetch=False):
+        calls.append(query.split()[0])
+        if fetch:
+            return [{"id": 2, "text": "fulfilled", "created_at": now}]
+        return None
+
+    recorded = []
+    monkeypatch.setattr(memory, "run", fake_run)
+    monkeypatch.setattr(memory, "append", lambda sid, role, text, **kw: recorded.append(text))
+    notifications.ack("s1", [2])
+    assert recorded == ["fulfilled"] and calls == ["SELECT", "UPDATE"]
 
 
 def test_notify_ticket_is_noop_without_session():

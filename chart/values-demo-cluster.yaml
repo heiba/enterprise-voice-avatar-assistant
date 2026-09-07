@@ -47,3 +47,9 @@ livekit:
     # secret named livekit-turn-tls (the pod waits for it).
     enabled: true
     tlsSecret: livekit-turn-tls
+
+n8n:
+  extraEnv:
+    # Google Drive folder that receives archived transcripts (WF5). Not a secret:
+    # the folder is only readable by the Google account connected in n8n.
+    GOOGLE_DOCS_FOLDER_ID: 1BT_vPj58sulZQIY7--05lrhP8WX9UbmX

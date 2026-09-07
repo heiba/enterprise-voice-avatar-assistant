@@ -134,6 +134,14 @@ livekit:
     enabled: false
     publicHost: ""
     tlsSecret: ""
+    # LiveKit denies TURN relay permissions for private peer addresses unless
+    # they are listed here. Inside a pod the media server's own ICE candidate is
+    # its private pod IP, so the pod network must be allowed or no media flows.
+    # The defaults cover the RFC 1918 ranges used by OpenShift pod networks.
+    allowRestrictedPeerCidrs:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
   resources:
     requests:
       cpu: 500m

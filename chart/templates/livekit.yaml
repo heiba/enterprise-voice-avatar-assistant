@@ -23,6 +23,10 @@ data:
       tls_port: 5349
       cert_file: /etc/livekit/tls/tls.crt
       key_file: /etc/livekit/tls/tls.key
+      {{- with .Values.livekit.turn.allowRestrictedPeerCidrs }}
+      allow_restricted_peer_cidrs:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     {{- end }}
 ---
 apiVersion: apps/v1

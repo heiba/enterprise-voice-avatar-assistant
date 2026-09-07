@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChatPanel } from "./components/ChatPanel";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CitationsPanel } from "./components/CitationsPanel";
 import { Header } from "./components/Header";
 import { StatusStrip } from "./components/StatusStrip";
@@ -23,8 +24,12 @@ export default function App() {
   const [info, setInfo] = useState<Info | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => sessionStorage.setItem(SESSION_KEY, sessionId), [sessionId]);
-  useEffect(() => localStorage.setItem(NAME_KEY, userName), [userName]);
+  useEffect(() => {
+    sessionStorage.setItem(SESSION_KEY, sessionId);
+  }, [sessionId]);
+  useEffect(() => {
+    localStorage.setItem(NAME_KEY, userName);
+  }, [userName]);
   useEffect(() => {
     api.info().then(setInfo).catch(() => setInfo(null));
   }, []);
@@ -85,6 +90,7 @@ export default function App() {
   };
 
   return (
+    <ErrorBoundary>
     <div className="app">
       <Header userName={userName} onUserName={setUserName} onReset={reset} sessionId={sessionId} />
       <div className="banner" role="note">
@@ -101,5 +107,6 @@ export default function App() {
       </main>
       <StatusStrip info={info} />
     </div>
+    </ErrorBoundary>
   );
 }

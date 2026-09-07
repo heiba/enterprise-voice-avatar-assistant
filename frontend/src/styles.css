@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light dark;
   --bg: #f4f5f7;
   --surface: #ffffff;
   --border: #d9dde3;
@@ -10,6 +11,19 @@
   --radius: 12px;
   font-family: "Red Hat Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   color: var(--text);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a;
+    --surface: #1f2329;
+    --border: #353b44;
+    --text: #e6e8eb;
+    --muted: #9aa3ad;
+    --accent: #ff4d4d;
+    --accent-soft: #3a1f1f;
+    --user: #1e2a3d;
+  }
+  .message.error { background: #3a2f10; }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); }
@@ -78,3 +92,7 @@ button.cite { display: inline-block; min-width: 20px; height: 20px; padding: 0 5
 
 .status { display: flex; flex-wrap: wrap; gap: 18px; padding: 8px 24px; font-size: 0.78rem; color: var(--muted); background: var(--surface); border-top: 1px solid var(--border); }
 .status b { color: var(--text); font-weight: 600; margin-right: 4px; }
+
+.fatal { max-width: 640px; margin: 80px auto; padding: 24px; background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius); }
+.fatal pre { white-space: pre-wrap; color: var(--accent); }
+.fatal button { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 8px 16px; }

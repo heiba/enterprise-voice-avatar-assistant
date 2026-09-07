@@ -46,7 +46,9 @@ export function ChatPanel({ messages, busy, onSend, onCite, onSelectMessage }: P
   const [draft, setDraft] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
 
-  useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), [messages]);
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const submit = (event?: FormEvent) => {
     event?.preventDefault();

@@ -3,6 +3,10 @@
 # public API and activates it. Matching is by workflow name, so re-running the
 # script updates the workflows in place.
 #
+# Credentials attached to nodes in the editor (for example the Slack API
+# credential) survive re-imports: they are copied from the existing workflow
+# by node name.
+#
 # Usage:
 #   N8N_URL=https://n8n-<ns>.<domain> N8N_API_KEY=<key from Settings > n8n API> scripts/import-workflows.sh [dir]
 set -euo pipefail
@@ -47,6 +51,13 @@ for path in files:
         body["staticData"] = wf["staticData"]
     if wf["name"] in existing:
         wid = existing[wf["name"]]
+        # The API replaces the node list wholesale, which would drop credentials
+        # attached in the editor; carry them over by node name.
+        current = call("GET", f"/workflows/{wid}")
+        creds = {n["name"]: n["credentials"] for n in current.get("nodes", []) if n.get("credentials")}
+        for node in body["nodes"]:
+            if not node.get("credentials") and node["name"] in creds:
+                node["credentials"] = creds[node["name"]]
         call("PUT", f"/workflows/{wid}", body)
         action = "updated"
     else:

@@ -8,8 +8,9 @@ Synthetic documents for the demo. Nothing here is real company data.
 | `invoice-INV-2026-0042.md` | classification demo: drop it in the `inbox` bucket and WF3 classifies it as an invoice and extracts supplier, total and due date |
 
 Upload a file to the `documents` bucket (MinIO console, or `mc cp`) and the
-ingestion workflow indexes it. Files dropped in the `inbox` bucket go through
-classification and extraction first (WF3), then get indexed. To bypass n8n during development:
+ingestion workflow indexes it. Files dropped in the `inbox` bucket are
+classified and their fields extracted (WF3) for a downstream system; they are
+not indexed for search. To bypass n8n during development:
 
 ```bash
 curl -X POST http://ingestion:8080/v1/ingest -H 'Content-Type: application/json' \

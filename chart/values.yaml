@@ -93,7 +93,7 @@ minio:
 
 n8n:
   enabled: true
-  image: docker.io/n8nio/n8n:2.37.11
+  image: ghcr.io/n8n-io/n8n:2.37.11
   # Public hostname. Computed from global.domain when empty.
   publicHost: ""
   storage: 5Gi

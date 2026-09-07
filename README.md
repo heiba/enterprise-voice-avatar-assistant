@@ -284,7 +284,7 @@ echo https://$(oc get route/frontend -n ${PROJECT} --template='{{.spec.host}}')
 helm test assistant --namespace ${PROJECT}
 ```
 
-4. Upload a sample document. Open the MinIO console, sign in with the credentials from the chart values, and upload a file from `data/sample-docs/` to the `documents` bucket. The ingestion workflow in n8n should run within a few seconds.
+4. Load the sample documents with `NS=${PROJECT} scripts/load-sample-docs.sh`. It uploads the policies in `data/sample-docs/` to the `documents` bucket and the invoices and contracts to `inbox`; the ingestion and classification workflows in n8n run within a few seconds. You can also upload single files through the MinIO console.
 
 ```bash
 echo https://$(oc get route/minio-console -n ${PROJECT} --template='{{.spec.host}}')
@@ -354,7 +354,7 @@ Target layout. Directories marked *planned* are not in the repository yet.
 │   ├── rag-api/                  # retrieval, memory, guardrails, classification, tickets (FastAPI)
 │   ├── ingestion/                # Docling parsing, chunking, embeddings, Qdrant upsert (FastAPI)
 │   └── voice-agent/              # LiveKit Agents worker (Whisper, RAG API, Kokoro, avatar providers)
-├── data/sample-docs/             # Synthetic sample documents for the demo
+├── data/sample-docs/             # Synthetic Example Corp documents (Markdown sources in src/, rendered DOCX and PDF)
 └── .github/workflows/            # CI: helm lint and tests; image builds published to ghcr.io
 ```
 

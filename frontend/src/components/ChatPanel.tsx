@@ -11,8 +11,9 @@ interface Props {
 
 const SUGGESTIONS = [
   "How often must administrator passwords be rotated?",
-  "What happens after ten failed sign-in attempts?",
-  "Which multi-factor authentication methods are approved?",
+  "How many days of annual leave do I get?",
+  "What is the laptop replacement cycle?",
+  "What is the response time for a Sev 1 incident?",
 ];
 
 const MARKER = /\[(\d{1,2})\]/g;

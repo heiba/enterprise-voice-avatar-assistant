@@ -15,10 +15,10 @@ voiceAgent:
   enabled: false
 ragApi:
   enabled: true
-  image: ghcr.io/heiba/assistant-rag-api:latest
+  image: ghcr.io/heiba/assistant-rag-api:sha-2003e07
 ingestion:
   enabled: true
-  image: ghcr.io/heiba/assistant-ingestion:sha-5cb88ff
+  image: ghcr.io/heiba/assistant-ingestion:sha-2003e07
 
 models:
   # The LLM, embeddings, and guardrails come from this chart. Whisper reuses the

@@ -33,6 +33,7 @@ export interface ChatMessage {
   blocked?: boolean;
   pending?: boolean;
   error?: boolean;
+  voice?: boolean;
 }
 
 export interface Info {
@@ -42,4 +43,22 @@ export interface Info {
   retrieval: { collection: string; top_k: number; min_score: number };
   memory: boolean;
   voice: { livekit_url: string };
+}
+
+export interface VoiceToken {
+  token: string;
+  url: string;
+  room: string;
+  identity: string;
+  session_id: string;
+}
+
+/** Published by the voice agent on the room data channel (topic "assistant") after every answer. */
+export interface AssistantTurn {
+  type: "assistant.answer";
+  session_id: string | null;
+  question: string;
+  answer: string;
+  blocked: boolean;
+  citations: Citation[];
 }

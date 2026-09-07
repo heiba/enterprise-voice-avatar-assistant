@@ -85,7 +85,11 @@ export function ChatPanel({ messages, busy, onSend, onCite, onSelectMessage }: P
             className={`message ${msg.role} ${msg.blocked ? "blocked" : ""} ${msg.error ? "error" : ""}`}
             onClick={() => msg.role === "assistant" && onSelectMessage(msg)}
           >
-            <header>{msg.role === "user" ? "You" : "Assistant"}{msg.blocked && <span className="tag">blocked by guardrails</span>}</header>
+            <header>
+              {msg.role === "user" ? "You" : "Assistant"}
+              {msg.voice && <span className="tag voice-tag">voice</span>}
+              {msg.blocked && <span className="tag">blocked by guardrails</span>}
+            </header>
             {msg.pending ? (
               <p className="pending">Searching documents and writing an answer…</p>
             ) : msg.role === "assistant" ? (

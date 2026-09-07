@@ -1,4 +1,4 @@
-import type { ChatResponse, Info } from "../types";
+import type { ChatResponse, Info, VoiceToken } from "../types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
@@ -30,4 +30,10 @@ export function info() {
 
 export function deleteSession(sessionId: string) {
   return request<{ deleted: string }>(`/v1/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+}
+
+export function voiceToken(params: { session_id: string; identity: string; name?: string }) {
+  const query = new URLSearchParams({ session_id: params.session_id, identity: params.identity });
+  if (params.name) query.set("name", params.name);
+  return request<VoiceToken>(`/v1/voice/token?${query.toString()}`);
 }

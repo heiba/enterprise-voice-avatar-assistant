@@ -42,7 +42,8 @@ qdrant:
 
 livekit:
   turn:
-    # Enable after copying the cluster wildcard certificate into the namespace
-    # as a kubernetes.io/tls secret named livekit-turn-tls.
-    enabled: false
+    # TURN over TLS behind a passthrough Route. Needs the cluster's wildcard
+    # ingress certificate copied into the namespace as a kubernetes.io/tls
+    # secret named livekit-turn-tls (the pod waits for it).
+    enabled: true
     tlsSecret: livekit-turn-tls

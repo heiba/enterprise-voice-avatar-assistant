@@ -71,8 +71,19 @@ button.cite { display: inline-block; min-width: 20px; height: 20px; padding: 0 5
 .composer textarea { flex: 1; resize: none; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
 .composer button { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 0 18px; font-weight: 600; }
 
-.voice { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.85rem; }
-.voice .mic { background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px; }
+.voice { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.85rem; }
+.voice .mic { background: var(--accent); color: #fff; border: 0; border-radius: 999px; padding: 10px 16px; font-weight: 600; }
+.voice-error { color: var(--accent); }
+.voice-room { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.voice-stage { display: flex; flex-direction: column; gap: 10px; }
+.avatar-frame { display: flex; align-items: center; justify-content: center; height: 180px; background: var(--bg); border-radius: 10px; overflow: hidden; }
+.avatar-video { width: 100%; height: 100%; object-fit: cover; }
+.visualizer { width: 60%; height: 120px; --lk-va-bar-width: 16px; --lk-va-bar-gap: 10px; --lk-fg: var(--accent); }
+.voice-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.85rem; }
+.voice-state { padding: 4px 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }
+.voice-state.state-listening { border-color: #16a34a; }
+.voice-state.state-speaking { border-color: var(--accent); }
+.voice-tag { background: var(--user); color: var(--text); }
 
 .citations { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; max-height: calc(100vh - 220px); overflow-y: auto; }
 .citations h2 { font-size: 1rem; margin-bottom: 10px; }

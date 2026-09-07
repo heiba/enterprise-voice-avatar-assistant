@@ -6,7 +6,7 @@ import { Header } from "./components/Header";
 import { StatusStrip } from "./components/StatusStrip";
 import { VoicePanel } from "./components/VoicePanel";
 import * as api from "./lib/api";
-import type { ChatMessage, Citation, Info } from "./types";
+import type { AssistantTurn, ChatMessage, Citation, Info } from "./types";
 
 const SESSION_KEY = "assistant.session";
 const NAME_KEY = "assistant.user";
@@ -82,6 +82,15 @@ export default function App() {
     api.deleteSession(old).catch(() => undefined);
   }, [sessionId]);
 
+  const onAssistantTurn = useCallback((turn: AssistantTurn) => {
+    const entries: ChatMessage[] = [];
+    if (turn.question) entries.push({ id: newId(), role: "user", content: turn.question, voice: true });
+    entries.push({ id: newId(), role: "assistant", content: turn.answer, citations: turn.citations, blocked: turn.blocked, voice: true });
+    setMessages((m) => [...m, ...entries]);
+    setCitations(turn.citations);
+    setSelected(turn.citations.find((c) => c.used)?.n ?? null);
+  }, []);
+
   const showCitations = (msg: ChatMessage) => {
     if (msg.citations) {
       setCitations(msg.citations);
@@ -99,7 +108,7 @@ export default function App() {
       <main className="layout">
         <section className="chat-column">
           <ChatPanel messages={messages} busy={busy} onSend={send} onCite={setSelected} onSelectMessage={showCitations} />
-          <VoicePanel enabled={false} />
+          <VoicePanel sessionId={sessionId} userName={userName} onAssistantTurn={onAssistantTurn} />
         </section>
         <aside className="citations-column">
           <CitationsPanel citations={citations} selected={selected} onSelect={setSelected} />

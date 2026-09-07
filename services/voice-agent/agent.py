@@ -66,14 +66,16 @@ class Assistant(Agent):
             log.exception("RAG API call failed for session %s", self._session_id)
             yield "Sorry, I could not reach the knowledge base just now. Please try again in a moment."
             return
-        await self._publish(reply)
+        await self._publish(reply, text)
         answer = helpers.speakable(reply.get("answer", ""))
         log.info("session=%s blocked=%s answer=%r", self._session_id, reply.get("blocked"), answer[:80])
         yield answer
 
-    async def _publish(self, reply: dict) -> None:
+    async def _publish(self, reply: dict, question: str) -> None:
         try:
-            await self._room.local_participant.publish_data(helpers.citations_payload(reply), reliable=True, topic="assistant")
+            await self._room.local_participant.publish_data(
+                helpers.citations_payload(reply, question), reliable=True, topic="assistant"
+            )
         except Exception as exc:  # noqa: BLE001
             log.warning("could not publish citations to the room: %s", exc)
 

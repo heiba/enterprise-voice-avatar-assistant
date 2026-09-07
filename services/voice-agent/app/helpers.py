@@ -51,12 +51,13 @@ def last_user_text(chat_ctx: Any) -> str:
     return ""
 
 
-def citations_payload(reply: dict[str, Any]) -> bytes:
-    """Data-channel message for the frontend: the answer with its citations."""
+def citations_payload(reply: dict[str, Any], question: str | None = None) -> bytes:
+    """Data-channel message for the frontend: the transcribed question, the answer, and its citations."""
     return json.dumps(
         {
             "type": "assistant.answer",
             "session_id": reply.get("session_id"),
+            "question": question or "",
             "answer": reply.get("answer", ""),
             "blocked": bool(reply.get("blocked")),
             "citations": reply.get("citations", []),

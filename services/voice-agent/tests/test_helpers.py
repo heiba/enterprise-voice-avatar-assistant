@@ -30,6 +30,7 @@ def test_last_user_text_prefers_text_content_and_falls_back_to_content_parts():
 
 def test_citations_payload_is_json():
     reply = {"session_id": "s", "answer": "x [1]", "blocked": False, "citations": [{"n": 1, "source": "a.md"}]}
-    data = json.loads(helpers.citations_payload(reply))
+    data = json.loads(helpers.citations_payload(reply, "what?"))
     assert data["type"] == "assistant.answer"
+    assert data["question"] == "what?"
     assert data["citations"][0]["source"] == "a.md"

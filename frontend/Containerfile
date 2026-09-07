@@ -1,0 +1,16 @@
+# Build stage: compile the React app.
+FROM registry.access.redhat.com/ubi9/nodejs-22:latest AS build
+WORKDIR /opt/app-root/src
+COPY --chown=1001:0 package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY --chown=1001:0 . .
+RUN npm run build
+
+# Runtime: UBI nginx serving the static bundle and proxying /api to the RAG API.
+FROM registry.access.redhat.com/ubi9/nginx-124:latest
+COPY --from=build --chown=1001:0 /opt/app-root/src/dist/ /opt/app-root/src/
+COPY --chown=1001:0 nginx/app.conf /opt/app-root/etc/nginx.default.d/app.conf
+COPY --chown=1001:0 nginx/entrypoint.sh /opt/app-root/entrypoint.sh
+RUN chmod g+w /opt/app-root/etc/nginx.default.d/app.conf
+EXPOSE 8080
+CMD ["/opt/app-root/entrypoint.sh"]

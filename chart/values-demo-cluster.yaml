@@ -9,10 +9,11 @@ global:
 images:
   registry: ghcr.io/heiba
 
-frontend:
-  enabled: false
 voiceAgent:
   enabled: false
+frontend:
+  enabled: true
+  image: ghcr.io/heiba/assistant-frontend:latest
 ragApi:
   enabled: true
   image: ghcr.io/heiba/assistant-rag-api:sha-2003e07

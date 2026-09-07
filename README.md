@@ -348,7 +348,7 @@ Target layout. Directories marked *planned* are not in the repository yet.
 ├── docs/
 │   └── images/                   # Architecture diagram and screenshots
 ├── n8n/workflows/                # planned: exported workflow JSON
-├── frontend/                     # planned: React + LiveKit chat and avatar UI
+├── frontend/                     # React chat UI with citations (voice and avatar to follow)
 ├── services/
 │   ├── rag-api/                  # retrieval, memory, guardrails, classification, tickets (FastAPI)
 │   ├── ingestion/                # Docling parsing, chunking, embeddings, Qdrant upsert (FastAPI)

@@ -1,0 +1,309 @@
+{
+  "name": "WF5 Transcript archival",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "archive-transcript",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "18e496f4-7579-55c2-9779-91eae3462b41",
+      "name": "Archive transcript",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "07c16432-27b2-50e2-a55b-14c5fbba661a"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.RAG_API_URL }}/v1/sessions/{{ $json.body.session_id }}/transcript",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "transcript"
+            }
+          }
+        }
+      },
+      "id": "a2e0cf53-16ec-5744-8484-8737a9b25f74",
+      "name": "Fetch transcript",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "const sid = $('Archive transcript').first().json.body.session_id;\nconst transcript = $input.first().json.transcript || '';\nconst date = new Date().toISOString().slice(0, 16).replace('T', ' ');\nreturn [{ json: { session_id: sid, title: `Assistant transcript ${sid.slice(0, 8)} ${date}`, transcript: `# Assistant transcript ${sid}\\n\\n${transcript}`, google_folder: $env.GOOGLE_DOCS_FOLDER_ID || '' } }];"
+      },
+      "id": "9ec06b11-8a8b-5b79-b002-c0a50f1a7551",
+      "name": "Prepare document",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8acf7cda-0436-505c-a1e9-5ff49798dff8",
+              "leftValue": "={{ $json.google_folder }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "28bf63b5-c1c0-5a53-bce2-2923ad944581",
+      "name": "Google Docs configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "folderId": "={{ $json.google_folder }}",
+        "title": "={{ $json.title }}"
+      },
+      "id": "26c8e46c-2555-5773-a2a5-4d54092f051a",
+      "name": "Create Google Doc",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        -140
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentURL": "={{ $json.id }}",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "object": "text",
+              "action": "insert",
+              "text": "={{ $('Prepare document').first().json.transcript }}"
+            }
+          ]
+        }
+      },
+      "id": "a9e94c6f-9d33-5a6e-9afa-1fb692f4f98a",
+      "name": "Write transcript to Doc",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        -140
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "transcript",
+        "options": {
+          "fileName": "=transcript-{{ $('Prepare document').first().json.session_id }}.md"
+        }
+      },
+      "id": "2597bacc-b1e5-510a-98d7-21d657fda0f8",
+      "name": "Transcript to file",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INGESTION_URL }}/v1/ingest/upload",
+        "options": {},
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "bucket",
+              "value": "transcripts"
+            }
+          ]
+        }
+      },
+      "id": "021aa93e-deff-5f96-92e5-ecf5c28f503d",
+      "name": "Re-ingest transcript",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1820,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#assistant-ingestion"
+        },
+        "otherOptions": {},
+        "text": "=:memo: Transcript of session {{ $('Prepare document').first().json.session_id.slice(0, 8) }} archived{{ $('Prepare document').first().json.google_folder ? ' to Google Docs' : '' }} and queued for re-ingestion (job {{ $json.job_id }})."
+      },
+      "id": "b35c1fcd-6ee0-5963-ab17-643447bd2f36",
+      "name": "Notify archival",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2080,
+        0
+      ],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Archive transcript": {
+      "main": [
+        [
+          {
+            "node": "Fetch transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch transcript": {
+      "main": [
+        [
+          {
+            "node": "Prepare document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare document": {
+      "main": [
+        [
+          {
+            "node": "Google Docs configured?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Docs configured?": {
+      "main": [
+        [
+          {
+            "node": "Create Google Doc",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Transcript to file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Google Doc": {
+      "main": [
+        [
+          {
+            "node": "Write transcript to Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write transcript to Doc": {
+      "main": [
+        [
+          {
+            "node": "Transcript to file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcript to file": {
+      "main": [
+        [
+          {
+            "node": "Re-ingest transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-ingest transcript": {
+      "main": [
+        [
+          {
+            "node": "Notify archival",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "active": false
+}

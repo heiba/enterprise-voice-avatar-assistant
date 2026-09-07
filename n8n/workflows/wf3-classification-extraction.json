@@ -1,0 +1,196 @@
+{
+  "name": "WF3 Classification and extraction",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "classify",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "d583d174-7085-55fd-89fa-123bf963ef27",
+      "name": "Classify webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "9a8a8698-bf34-528b-85d4-515f544982d5"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RAG_API_URL }}/v1/classify",
+        "options": {
+          "timeout": 180000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ bucket: $json.body.bucket, key: $json.body.key }) }}"
+      },
+      "id": "c5b539f9-66b0-52a0-a9eb-571c7b496f47",
+      "name": "Classify document",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst key = $('Classify webhook').first().json.body.key;\nconst fields = JSON.stringify(r.fields || {}, null, 2);\nconst text = `:page_facing_up: *${key}* classified as *${r.doc_type}* (confidence ${Math.round((r.confidence || 0) * 100)}%)\\n${r.summary || ''}\\n\\`\\`\\`${fields.slice(0, 2500)}\\`\\`\\``;\nreturn [{ json: { key, doc_type: r.doc_type, confidence: r.confidence, summary: r.summary, fields: r.fields, doc_id: r.doc_id, text } }];"
+      },
+      "id": "fc6d24d4-711d-545b-b303-1a8cdd25c5fb",
+      "name": "Format result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#assistant-documents"
+        },
+        "otherOptions": {},
+        "text": "={{ $json.text }}"
+      },
+      "id": "54a986b1-3655-5e31-822c-92d77248463c",
+      "name": "Notify documents",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        780,
+        0
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "28f10d7b-2972-5c9d-8674-8c6a9bd984c1",
+              "leftValue": "={{ $env.DOWNSTREAM_URL || '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "90978f02-2c5e-55ad-bae1-7728833d9789",
+      "name": "Downstream configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DOWNSTREAM_URL }}",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: $json.key, doc_type: $json.doc_type, fields: $json.fields, summary: $json.summary }) }}"
+      },
+      "id": "4fdbdb28-2e18-501f-893d-1de9d3d872da",
+      "name": "Send to downstream system",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Classify webhook": {
+      "main": [
+        [
+          {
+            "node": "Classify document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify document": {
+      "main": [
+        [
+          {
+            "node": "Format result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format result": {
+      "main": [
+        [
+          {
+            "node": "Notify documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify documents": {
+      "main": [
+        [
+          {
+            "node": "Downstream configured?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Downstream configured?": {
+      "main": [
+        [
+          {
+            "node": "Send to downstream system",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "active": false
+}

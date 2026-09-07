@@ -1,0 +1,341 @@
+{
+  "name": "WF2 Document ingestion",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "minio-event",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "4dbc8f26-49b0-5e63-aa63-f54e6724036d",
+      "name": "MinIO event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "2d86817b-b7f1-5cbb-9361-971be678385c"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst out = [];\nfor (const r of body.Records || []) {\n  const bucket = r.s3 && r.s3.bucket && r.s3.bucket.name;\n  const rawKey = (r.s3 && r.s3.object && r.s3.object.key) || '';\n  const key = decodeURIComponent(rawKey.replace(/\\+/g, ' '));\n  const event = r.eventName || body.EventName || '';\n  if (bucket && key) out.push({ json: { bucket, key, event, created: event.includes('ObjectCreated') } });\n}\nif (!out.length && body.Key) {\n  const [bucket, ...rest] = String(body.Key).split('/');\n  const event = body.EventName || '';\n  out.push({ json: { bucket, key: rest.join('/'), event, created: event.includes('ObjectCreated') } });\n}\nreturn out;"
+      },
+      "id": "ec5a5176-c2e7-50f9-8ffd-95b120d2e7cd",
+      "name": "Parse MinIO event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6534d049-e6c5-521b-8c6d-e44479a96831",
+              "leftValue": "={{ $json.created }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "476c9e4a-b78b-5c34-8e84-5199e8d52920",
+      "name": "Object created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fd195bbf-fe7d-5742-94f1-c23808471244",
+              "leftValue": "={{ $json.bucket }}",
+              "rightValue": "inbox",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "735b8359-eac5-5088-af9e-953626d19d53",
+      "name": "Inbox bucket?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:5678/webhook/classify",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ bucket: $json.bucket, key: $json.key }) }}"
+      },
+      "id": "955da137-350b-5c4b-b398-c71d3cb32a83",
+      "name": "Classify via WF3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        980,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.INGESTION_URL }}/v1/ingest",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ bucket: $json.bucket, key: $json.key }) }}"
+      },
+      "id": "e68b9d7b-649c-5f98-a6a8-ad3797cd54dc",
+      "name": "Start ingestion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        980,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "id": "8fff1377-b677-5a2c-a2b4-da6643b337b1",
+      "name": "Wait 5 s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1220,
+        0
+      ],
+      "webhookId": "d7ac5284-2887-59fc-be34-64625b359a72"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.INGESTION_URL }}/v1/jobs/{{ $('Start ingestion').first().json.job_id }}",
+        "options": {}
+      },
+      "id": "43c02e76-534d-581f-bbde-bff019c3e0a3",
+      "name": "Get job status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1460,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fcac0b14-f407-53b6-a912-5414db321ee4",
+              "leftValue": "={{ ['done','failed'].includes($json.status) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0d14d234-40d9-5c43-a956-90fc484b3eae",
+      "name": "Job finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1700,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#assistant-ingestion"
+        },
+        "otherOptions": {},
+        "text": "={{ $json.status === 'done' ? ':white_check_mark:' : ':x:' }} *{{ $json.key }}* ({{ $json.bucket }}): {{ $json.status }}{{ $json.status === 'done' ? ', ' + $json.chunks + ' chunks indexed' : ', ' + ($json.error || 'unknown error') }}"
+      },
+      "id": "3db0f2e5-c746-5718-9490-5a1bf5e5c06c",
+      "name": "Notify ingestion",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1960,
+        0
+      ],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "MinIO event": {
+      "main": [
+        [
+          {
+            "node": "Parse MinIO event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse MinIO event": {
+      "main": [
+        [
+          {
+            "node": "Object created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Object created?": {
+      "main": [
+        [
+          {
+            "node": "Inbox bucket?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inbox bucket?": {
+      "main": [
+        [
+          {
+            "node": "Classify via WF3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start ingestion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start ingestion": {
+      "main": [
+        [
+          {
+            "node": "Wait 5 s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5 s": {
+      "main": [
+        [
+          {
+            "node": "Get job status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get job status": {
+      "main": [
+        [
+          {
+            "node": "Job finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job finished?": {
+      "main": [
+        [
+          {
+            "node": "Notify ingestion",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 5 s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "active": false
+}

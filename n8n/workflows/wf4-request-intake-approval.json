@@ -1,0 +1,416 @@
+{
+  "name": "WF4 Request intake and approval",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "request-intake",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "3be6a99c-4a52-53e1-a407-33282802dae0",
+      "name": "Request intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -200
+      ],
+      "webhookId": "e32e49d3-f4f3-5bf4-96e6-43b8c3958c46"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body;\nconst t = b.ticket, cls = b.classification || {};\nconst summary = cls.summary || t.description || '';\nconst blocks = [\n  { type: 'header', text: { type: 'plain_text', text: `Service request ${t.ticket_ref}` } },\n  { type: 'section', text: { type: 'mrkdwn', text: `*${t.title}*\\n${summary}` } },\n  { type: 'section', fields: [\n    { type: 'mrkdwn', text: `*Category*\\n${t.category || '-'}` },\n    { type: 'mrkdwn', text: `*Priority*\\n${t.priority || '-'}` },\n    { type: 'mrkdwn', text: `*Requester*\\n${t.requester || '-'}` },\n    { type: 'mrkdwn', text: `*Channel*\\n${b.channel || '-'}` } ] },\n  { type: 'actions', elements: [\n    { type: 'button', style: 'primary', text: { type: 'plain_text', text: 'Approve' }, action_id: 'approve_request', value: t.ticket_ref },\n    { type: 'button', style: 'danger', text: { type: 'plain_text', text: 'Reject' }, action_id: 'reject_request', value: t.ticket_ref } ] }\n];\nreturn [{ json: { ticket_ref: t.ticket_ref, title: t.title, needs_approval: cls.needs_approval !== false, blocks: JSON.stringify(blocks), text: `Service request ${t.ticket_ref}: ${t.title}` } }];"
+      },
+      "id": "8f5f0040-fa7b-5ec6-8814-f58a829f66b6",
+      "name": "Build approval message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "976e80c2-0cfb-5d6f-aee0-d6c7e707fb7b",
+              "leftValue": "={{ $json.needs_approval }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c6a0fa09-0bd1-5714-90c1-81d04ae386f0",
+      "name": "Needs approval?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#assistant-approvals"
+        },
+        "otherOptions": {},
+        "messageType": "block",
+        "blocksUi": "={{ $json.blocks }}",
+        "text": "={{ $json.text }}"
+      },
+      "id": "9766eb4e-c16e-5eba-a12d-0b0af940f838",
+      "name": "Ask for approval",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        780,
+        -300
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.RAG_API_URL }}/v1/tickets/{{ $json.ticket_ref }}",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'approved', actor: 'n8n', note: 'no approval required' }) }}"
+      },
+      "id": "dfc40aa1-76ae-5a9d-b6c0-dd077778f273",
+      "name": "Auto-approve",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        -100
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-interactions",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "0c8f0e08-848e-56da-a3df-78c34ad2361e",
+      "name": "Slack interaction",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "webhookId": "de6904fc-2314-5540-8ab6-3400f1f2f9ff"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.body && $input.first().json.body.payload;\nconst p = typeof raw === 'string' ? JSON.parse(raw) : (raw || $input.first().json);\nconst a = (p.actions && p.actions[0]) || {};\nconst decision = a.action_id === 'approve_request' ? 'approved' : 'rejected';\nconst actor = (p.user && (p.user.username || p.user.name)) || 'slack';\nreturn [{ json: { ticket_ref: a.value, decision, actor, response_url: p.response_url || '' } }];"
+      },
+      "id": "b48de297-50a7-534b-bf85-29fd3df2fcad",
+      "name": "Parse Slack action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.RAG_API_URL }}/v1/tickets/{{ $json.ticket_ref }}",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: $json.decision, actor: $json.actor, note: 'decided in Slack' }) }}"
+      },
+      "id": "10876d8c-71c6-50c6-b978-6f6774ebad3e",
+      "name": "Record decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "79018b39-5536-54a1-8b3c-69c8931ff18a",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a20e1bcb-fccb-57f5-9fb6-2193f6c05a53",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.RAG_API_URL }}/v1/tickets/{{ $json.ticket_ref }}",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'fulfilled', actor: 'n8n', note: 'fulfilled by the workflow (mock downstream)' }) }}"
+      },
+      "id": "cf56b53f-841d-5ef0-8a81-2aa142b3568b",
+      "name": "Fulfil request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        100
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#assistant-tickets"
+        },
+        "otherOptions": {},
+        "text": "=:tada: *{{ $json.ticket_ref }}* {{ $json.title }} approved by {{ $('Parse Slack action').first().json.actor }} and fulfilled."
+      },
+      "id": "35a2cb0f-921a-544f-b7db-2d0dbe334951",
+      "name": "Notify fulfilment",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1300,
+        100
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#assistant-tickets"
+        },
+        "otherOptions": {},
+        "text": "=:x: *{{ $json.ticket_ref }}* {{ $json.title }} was rejected by {{ $('Parse Slack action').first().json.actor }}."
+      },
+      "id": "e06f45d3-7916-584d-902c-2fb29de9ac1d",
+      "name": "Notify rejection",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1040,
+        320
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Parse Slack action').first().json.response_url }}",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ replace_original: true, text: 'Request ' + $json.ticket_ref + ' ' + $json.status + ' by ' + $('Parse Slack action').first().json.actor }) }}"
+      },
+      "id": "eae35b1e-fd46-569b-9007-08c9ab2691c0",
+      "name": "Update Slack message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Request intake": {
+      "main": [
+        [
+          {
+            "node": "Build approval message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build approval message": {
+      "main": [
+        [
+          {
+            "node": "Needs approval?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs approval?": {
+      "main": [
+        [
+          {
+            "node": "Ask for approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auto-approve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack interaction": {
+      "main": [
+        [
+          {
+            "node": "Parse Slack action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Slack action": {
+      "main": [
+        [
+          {
+            "node": "Record decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record decision": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Fulfil request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fulfil request": {
+      "main": [
+        [
+          {
+            "node": "Notify fulfilment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify fulfilment": {
+      "main": [
+        [
+          {
+            "node": "Update Slack message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify rejection": {
+      "main": [
+        [
+          {
+            "node": "Update Slack message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "active": false
+}

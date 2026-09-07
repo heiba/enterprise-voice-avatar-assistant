@@ -17,7 +17,7 @@ voiceAgent:
   enabled: false
 ingestion:
   enabled: true
-  image: ghcr.io/heiba/assistant-ingestion:latest
+  image: ghcr.io/heiba/assistant-ingestion:sha-5cb88ff
 
 models:
   # The LLM, embeddings, and guardrails come from this chart. Whisper reuses the

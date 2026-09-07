@@ -3,11 +3,12 @@
 import logging
 import re
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
-from . import clients, guardrails, memory, retrieval
+from . import clients, guardrails, intent, memory, retrieval, tickets
 from .config import VOICE_STYLE, settings
 from .retrieval import Hit
-from .schemas import ChatRequest, ChatResponse, Citation, GuardrailInfo
+from .schemas import ChatRequest, ChatResponse, Citation, GuardrailInfo, RequestIntake, Ticket
 
 log = logging.getLogger("rag.chat")
 MARKER_RE = re.compile(r"\[(\d{1,2})\]")
@@ -26,8 +27,13 @@ def build_context(hits: list[Hit]) -> str:
     return "\n\n".join(parts)
 
 
-def build_messages(question: str, hits: list[Hit], history: list[dict[str, str]], mode: str,
-                   user_memory: dict[str, str] | None = None) -> list[dict[str, str]]:
+def build_messages(
+    question: str,
+    hits: list[Hit],
+    history: list[dict[str, str]],
+    mode: str,
+    user_memory: dict[str, str] | None = None,
+) -> list[dict[str, str]]:
     system = settings.system_prompt.format(assistant_name=settings.assistant_name)
     if mode == "voice":
         system += VOICE_STYLE
@@ -52,6 +58,51 @@ def retrieval_query(message: str, history: list[dict[str, str]]) -> str:
     return message
 
 
+def request_reply(ticket: Ticket) -> str:
+    """What the assistant says right after filing a request from the conversation."""
+    head = f"I've logged your request {ticket.ticket_ref}: {ticket.title.rstrip('.')}. "
+    detail = f"It's a {ticket.category or 'general'} request with {ticket.priority} priority"
+    if ticket.status == "pending_approval":
+        return head + detail + " and needs approval. I'll let you know here as soon as it's decided."
+    return (
+        head
+        + detail
+        + ". No approval is needed, so it's being fulfilled now, and I'll confirm when it's done."
+    )
+
+
+def file_request(request: ChatRequest, session_id: str, info: GuardrailInfo) -> ChatResponse:
+    """The message was a service request: classify it, open a ticket, start the approval workflow."""
+    try:
+        ticket, _classification, notified = tickets.intake(
+            RequestIntake(
+                text=request.message, session_id=session_id, user_id=request.user_id, channel=request.mode
+            )
+        )
+    except tickets.TicketError as exc:
+        log.warning("could not file a request for session %s: %s", session_id, exc.detail)
+        text = "I understood that as a service request, but I can't file tickets right now. Please try again later."
+        memory.append(session_id, "user", request.message)
+        memory.append(session_id, "assistant", text)
+        return ChatResponse(
+            session_id=session_id, answer=text, citations=[], guardrail=info, model=settings.llm_model
+        )
+    text = request_reply(ticket)
+    memory.append(session_id, "user", request.message)
+    memory.append(session_id, "assistant", text)
+    log.info(
+        "session=%s filed %s (%s, notified n8n=%s)", session_id, ticket.ticket_ref, ticket.status, notified
+    )
+    return ChatResponse(
+        session_id=session_id,
+        answer=text,
+        citations=[],
+        guardrail=info,
+        model=settings.llm_model,
+        ticket=ticket,
+    )
+
+
 def answer(request: ChatRequest) -> ChatResponse:
     session_id = request.session_id or uuid.uuid4().hex
     memory.ensure_conversation(session_id, request.user_id, request.mode)
@@ -62,11 +113,25 @@ def answer(request: ChatRequest) -> ChatResponse:
         info.input_flagged, info.category = True, verdict.category
         memory.append(session_id, "user", request.message, blocked=True)
         memory.append(session_id, "assistant", settings.blocked_message, blocked=True)
-        return ChatResponse(session_id=session_id, answer=settings.blocked_message, citations=[], blocked=True,
-                            guardrail=info, model=settings.llm_model)
+        return ChatResponse(
+            session_id=session_id,
+            answer=settings.blocked_message,
+            citations=[],
+            blocked=True,
+            guardrail=info,
+            model=settings.llm_model,
+        )
 
     history = memory.history(session_id, settings.history_turns * 2)
-    hits = retrieval.search(retrieval_query(request.message, history), top_k=request.top_k)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        intent_future = pool.submit(intent.detect, request.message)
+        hits_future = pool.submit(
+            retrieval.search, retrieval_query(request.message, history), top_k=request.top_k
+        )
+        kind = intent_future.result()
+        hits = hits_future.result()
+    if kind == "request":
+        return file_request(request, session_id, info)
     user_memory = memory.get_user_memory(request.user_id) if request.user_id else {}
     messages = build_messages(request.message, hits, history, request.mode, user_memory)
 
@@ -90,5 +155,11 @@ def answer(request: ChatRequest) -> ChatResponse:
     memory.append(session_id, "user", request.message)
     memory.append(session_id, "assistant", text, citations=citations, blocked=blocked)
     log.info("session=%s hits=%d cited=%s blocked=%s", session_id, len(hits), sorted(used), blocked)
-    return ChatResponse(session_id=session_id, answer=text, citations=citations, blocked=blocked, guardrail=info,
-                        model=settings.llm_model)
+    return ChatResponse(
+        session_id=session_id,
+        answer=text,
+        citations=citations,
+        blocked=blocked,
+        guardrail=info,
+        model=settings.llm_model,
+    )

@@ -87,6 +87,8 @@ button.cite { display: inline-block; min-width: 20px; height: 20px; padding: 0 5
 .voice-state.state-listening { border-color: #16a34a; }
 .voice-state.state-speaking { border-color: var(--accent); }
 .voice-tag { background: var(--user); color: var(--text); }
+.ticket-tag { background: var(--accent-soft); color: var(--text); }
+.notice-tag { background: #16a34a22; color: var(--text); }
 
 .citations { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; max-height: calc(100vh - 220px); overflow-y: auto; }
 .citations h2 { font-size: 1rem; margin-bottom: 10px; }

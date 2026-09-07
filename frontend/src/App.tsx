@@ -23,6 +23,7 @@ export default function App() {
   const [selected, setSelected] = useState<number | null>(null);
   const [info, setInfo] = useState<Info | null>(null);
   const [busy, setBusy] = useState(false);
+  const [voiceActive, setVoiceActive] = useState(false);
 
   useEffect(() => {
     sessionStorage.setItem(SESSION_KEY, sessionId);
@@ -33,6 +34,31 @@ export default function App() {
   useEffect(() => {
     api.info().then(setInfo).catch(() => setInfo(null));
   }, []);
+
+  // Outcome notices (a request decided in Slack) reach the session through the RAG API. During a
+  // voice session the agent speaks and relays them; otherwise the page polls and shows them.
+  useEffect(() => {
+    if (voiceActive) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const pending = await api.notifications(sessionId);
+        if (cancelled || pending.length === 0) return;
+        setMessages((m) => [
+          ...m,
+          ...pending.map((n) => ({ id: `notice-${n.id}`, role: "assistant" as const, content: n.text, notice: true })),
+        ]);
+        await api.ackNotifications(sessionId, pending.map((n) => n.id));
+      } catch {
+        /* the API may be briefly unavailable; try again on the next tick */
+      }
+    };
+    const timer = window.setInterval(poll, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [sessionId, voiceActive]);
 
   const send = useCallback(
     async (text: string) => {
@@ -51,7 +77,14 @@ export default function App() {
         setMessages((m) =>
           m.map((msg) =>
             msg.id === pendingId
-              ? { id: pendingId, role: "assistant", content: reply.answer, citations: reply.citations, blocked: reply.blocked }
+              ? {
+                  id: pendingId,
+                  role: "assistant",
+                  content: reply.answer,
+                  citations: reply.citations,
+                  blocked: reply.blocked,
+                  ticket: reply.ticket ?? null,
+                }
               : msg,
           ),
         );
@@ -85,7 +118,16 @@ export default function App() {
   const onAssistantTurn = useCallback((turn: AssistantTurn) => {
     const entries: ChatMessage[] = [];
     if (turn.question) entries.push({ id: newId(), role: "user", content: turn.question, voice: true });
-    entries.push({ id: newId(), role: "assistant", content: turn.answer, citations: turn.citations, blocked: turn.blocked, voice: true });
+    entries.push({
+      id: newId(),
+      role: "assistant",
+      content: turn.answer,
+      citations: turn.citations,
+      blocked: turn.blocked,
+      voice: true,
+      ticket: turn.ticket ?? null,
+      notice: !turn.question,
+    });
     setMessages((m) => [...m, ...entries]);
     setCitations(turn.citations);
     setSelected(turn.citations.find((c) => c.used)?.n ?? null);
@@ -107,7 +149,7 @@ export default function App() {
       </div>
       <main className="layout">
         <section className="avatar-column">
-          <VoicePanel sessionId={sessionId} userName={userName} onAssistantTurn={onAssistantTurn} />
+          <VoicePanel sessionId={sessionId} userName={userName} onAssistantTurn={onAssistantTurn} onActiveChange={setVoiceActive} />
         </section>
         <section className="chat-column">
           <ChatPanel messages={messages} busy={busy} onSend={send} onCite={setSelected} onSelectMessage={showCitations} />

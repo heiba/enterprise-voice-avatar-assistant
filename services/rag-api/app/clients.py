@@ -16,20 +16,31 @@ def _http() -> httpx.Client:
 
 @lru_cache(maxsize=1)
 def llm() -> OpenAI:
-    return OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key or "none", http_client=_http(), max_retries=2)
+    return OpenAI(
+        base_url=settings.llm_base_url,
+        api_key=settings.llm_api_key or "none",
+        http_client=_http(),
+        max_retries=2,
+    )
 
 
 @lru_cache(maxsize=1)
 def embeddings() -> OpenAI:
     return OpenAI(
-        base_url=settings.embeddings_base_url, api_key=settings.embeddings_api_key or "none", http_client=_http(), max_retries=2
+        base_url=settings.embeddings_base_url,
+        api_key=settings.embeddings_api_key or "none",
+        http_client=_http(),
+        max_retries=2,
     )
 
 
 @lru_cache(maxsize=1)
 def guardrails() -> OpenAI:
     return OpenAI(
-        base_url=settings.guardrails_base_url, api_key=settings.guardrails_api_key or "none", http_client=_http(), max_retries=1
+        base_url=settings.guardrails_base_url,
+        api_key=settings.guardrails_api_key or "none",
+        http_client=_http(),
+        max_retries=1,
     )
 
 

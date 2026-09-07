@@ -21,9 +21,21 @@ class Hit:
     headings: list[str] = field(default_factory=list)
 
     def to_citation(self, n: int, used: bool = False) -> Citation:
-        snippet = self.text if len(self.text) <= settings.snippet_chars else self.text[: settings.snippet_chars] + "…"
-        return Citation(n=n, used=used, doc_id=self.doc_id, source=self.source, page=self.page,
-                        headings=self.headings, snippet=snippet, score=round(self.score, 4))
+        snippet = (
+            self.text
+            if len(self.text) <= settings.snippet_chars
+            else self.text[: settings.snippet_chars] + "…"
+        )
+        return Citation(
+            n=n,
+            used=used,
+            doc_id=self.doc_id,
+            source=self.source,
+            page=self.page,
+            headings=self.headings,
+            snippet=snippet,
+            score=round(self.score, 4),
+        )
 
 
 def embed(text: str) -> list[float]:

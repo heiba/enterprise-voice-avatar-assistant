@@ -24,13 +24,27 @@ def test_last_user_text_prefers_text_content_and_falls_back_to_content_parts():
             SimpleNamespace(role="user", text_content=None, content=["and", " for service accounts?"]),
         ]
     )
-    assert helpers.last_user_text(ctx) == "and  for service accounts?".replace("  ", " ") or helpers.last_user_text(ctx)
+    assert helpers.last_user_text(ctx) == "and  for service accounts?".replace(
+        "  ", " "
+    ) or helpers.last_user_text(ctx)
     assert helpers.last_user_text(SimpleNamespace(items=[])) == ""
 
 
 def test_citations_payload_is_json():
-    reply = {"session_id": "s", "answer": "x [1]", "blocked": False, "citations": [{"n": 1, "source": "a.md"}]}
+    reply = {
+        "session_id": "s",
+        "answer": "x [1]",
+        "blocked": False,
+        "citations": [{"n": 1, "source": "a.md"}],
+    }
     data = json.loads(helpers.citations_payload(reply, "what?"))
     assert data["type"] == "assistant.answer"
     assert data["question"] == "what?"
     assert data["citations"][0]["source"] == "a.md"
+
+
+def test_citations_payload_carries_ticket():
+    data = json.loads(
+        helpers.citations_payload({"session_id": "s", "answer": "filed", "ticket": {"ticket_ref": "REQ-1"}})
+    )
+    assert data["ticket"] == {"ticket_ref": "REQ-1"} and data["question"] == ""

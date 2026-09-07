@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     # RAG API: every user turn goes through it so voice shares grounding, memory, and guardrails with text
     rag_api_url: str = "http://rag-api:8080"
     rag_timeout_seconds: float = 90.0
+    # How often the agent asks the RAG API for outcome notices (ticket decisions) to speak
+    notification_poll_seconds: float = 3.0
 
     # Speech to text (OpenAI-compatible transcription endpoint, Whisper on vLLM)
     stt_base_url: str = "http://localhost:8000/v1"

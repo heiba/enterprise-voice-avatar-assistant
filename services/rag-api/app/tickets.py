@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from . import clients
+from . import clients, notifications
 from .config import settings
 from .schemas import RequestIntake, Ticket, TicketCreate, TicketEvent, TicketUpdate
 
@@ -43,8 +43,7 @@ def _require_db() -> None:
 
 
 def _row_to_ticket(row: dict[str, Any], events: list[dict[str, Any]]) -> Ticket:
-    return Ticket(**{**row, "payload": row.get("payload") or {}},
-                  events=[TicketEvent(**e) for e in events])
+    return Ticket(**{**row, "payload": row.get("payload") or {}}, events=[TicketEvent(**e) for e in events])
 
 
 def _load(conn, ticket_id: int) -> Ticket:
@@ -73,8 +72,15 @@ def create(data: TicketCreate, actor: str | None = None) -> Ticket:
         row = conn.execute(
             """INSERT INTO tickets (title, description, category, priority, requester, session_id, payload)
                VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb) RETURNING id""",
-            (data.title, data.description, data.category, data.priority, data.requester, data.session_id,
-             json.dumps(data.payload)),
+            (
+                data.title,
+                data.description,
+                data.category,
+                data.priority,
+                data.requester,
+                data.session_id,
+                json.dumps(data.payload),
+            ),
         ).fetchone()
         ticket_id = row["id"]
         conn.execute("UPDATE tickets SET ticket_ref = %s WHERE id = %s", (f"REQ-{ticket_id:06d}", ticket_id))
@@ -96,7 +102,9 @@ def list_tickets(status: str | None = None, limit: int = 50) -> list[Ticket]:
     _require_db()
     with clients.db() as conn:
         if status:
-            rows = conn.execute("SELECT * FROM tickets WHERE status = %s ORDER BY id DESC LIMIT %s", (status, limit)).fetchall()
+            rows = conn.execute(
+                "SELECT * FROM tickets WHERE status = %s ORDER BY id DESC LIMIT %s", (status, limit)
+            ).fetchall()
         else:
             rows = conn.execute("SELECT * FROM tickets ORDER BY id DESC LIMIT %s", (limit,)).fetchall()
         return [_row_to_ticket(dict(r), []) for r in rows]
@@ -129,16 +137,21 @@ def update(ref: str, data: TicketUpdate) -> Ticket:
                 (ticket_id, current.status, current.status, data.actor, data.note),
             )
         if data.payload is not None:
-            conn.execute("UPDATE tickets SET payload = payload || %s::jsonb, updated_at = now() WHERE id = %s",
-                         (json.dumps(data.payload), ticket_id))
+            conn.execute(
+                "UPDATE tickets SET payload = payload || %s::jsonb, updated_at = now() WHERE id = %s",
+                (json.dumps(data.payload), ticket_id),
+            )
         conn.commit()
-        return _load(conn, ticket_id)
+        ticket = _load(conn, ticket_id)
+    if data.status and data.status != current.status and data.status in notifications.NOTIFY_STATES:
+        notifications.notify_ticket(ticket)
+    return ticket
 
 
 def classify_request(text: str) -> dict[str, Any]:
     system = (
         "You triage IT and workplace service requests. Respond with a single JSON object and nothing else, with keys: "
-        '"title" (short imperative, max 12 words), "category" (one of ' + ", ".join(CATEGORIES) + '), '
+        '"title" (short imperative, max 12 words), "category" (one of ' + ", ".join(CATEGORIES) + "), "
         '"priority" (low, normal, high, urgent), "summary" (one sentence), '
         '"needs_approval" (true when the request grants access, costs money, or changes permissions), '
         '"details" (object with any specific items mentioned, for example {"software": "Visual Studio Code"}).'
@@ -196,13 +209,22 @@ def intake(request: RequestIntake) -> tuple[Ticket, dict[str, Any], bool]:
             priority=classification["priority"],
             requester=request.requester or request.user_id,
             session_id=request.session_id,
-            payload={"channel": request.channel, "summary": classification["summary"], **classification["details"]},
+            payload={
+                "channel": request.channel,
+                "summary": classification["summary"],
+                **classification["details"],
+            },
             needs_approval=classification["needs_approval"],
         ),
         actor=request.requester or request.user_id,
     )
-    ticket = update(str(ticket.id), TicketUpdate(status="classified", actor="assistant", note=classification["summary"]))
+    ticket = update(
+        str(ticket.id), TicketUpdate(status="classified", actor="assistant", note=classification["summary"])
+    )
     if classification["needs_approval"]:
-        ticket = update(str(ticket.id), TicketUpdate(status="pending_approval", actor="assistant", note="awaiting approval"))
+        ticket = update(
+            str(ticket.id),
+            TicketUpdate(status="pending_approval", actor="assistant", note="awaiting approval"),
+        )
     notified = notify_n8n(ticket, classification, request.channel)
     return ticket, classification, notified

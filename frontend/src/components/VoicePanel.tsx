@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BarVisualizer,
   LiveKitRoom,
@@ -18,6 +18,7 @@ interface Props {
   sessionId: string;
   userName: string;
   onAssistantTurn: (turn: AssistantTurn) => void;
+  onActiveChange?: (active: boolean) => void;
 }
 
 const STATE_LABEL: Record<string, string> = {
@@ -33,8 +34,11 @@ function slug(name: string) {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-export function VoicePanel({ sessionId, userName, onAssistantTurn }: Props) {
+export function VoicePanel({ sessionId, userName, onAssistantTurn, onActiveChange }: Props) {
   const [connection, setConnection] = useState<VoiceToken | null>(null);
+  useEffect(() => {
+    onActiveChange?.(connection !== null);
+  }, [connection, onActiveChange]);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

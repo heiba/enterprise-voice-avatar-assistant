@@ -1,17 +1,17 @@
 """RAG API.
 
-  GET  /healthz, /readyz
-  POST /v1/chat                       grounded answer with citations, memory, guardrails (text or voice mode)
-  POST /v1/search                     retrieval only
-  GET  /v1/sessions/{id}/messages     conversation history
-  GET  /v1/sessions/{id}/transcript   plain-text transcript (for archival workflows)
-  DELETE /v1/sessions/{id}            forget a conversation
-  GET/PUT/DELETE /v1/users/{id}/memory   long-lived facts injected into prompts
-  POST /v1/classify                   document type and fields (text, or bucket/key via the ingestion service)
-  POST /v1/tickets, GET /v1/tickets, GET /v1/tickets/{ref}, PATCH /v1/tickets/{ref}
-  POST /v1/requests                   service request intake: classify, create ticket, notify n8n
-  GET  /v1/voice/token                LiveKit token for the browser
-  GET  /v1/info                       active models and providers (for the diagnostics panel)
+GET  /healthz, /readyz
+POST /v1/chat                       grounded answer with citations, memory, guardrails (text or voice mode)
+POST /v1/search                     retrieval only
+GET  /v1/sessions/{id}/messages     conversation history
+GET  /v1/sessions/{id}/transcript   plain-text transcript (for archival workflows)
+DELETE /v1/sessions/{id}            forget a conversation
+GET/PUT/DELETE /v1/users/{id}/memory   long-lived facts injected into prompts
+POST /v1/classify                   document type and fields (text, or bucket/key via the ingestion service)
+POST /v1/tickets, GET /v1/tickets, GET /v1/tickets/{ref}, PATCH /v1/tickets/{ref}
+POST /v1/requests                   service request intake: classify, create ticket, notify n8n
+GET  /v1/voice/token                LiveKit token for the browser
+GET  /v1/info                       active models and providers (for the diagnostics panel)
 """
 
 import asyncio
@@ -23,7 +23,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from . import classify, clients, memory, rag, retrieval, tickets, voice
+from . import classify, clients, memory, notifications, rag, retrieval, tickets, voice
 from .config import settings
 from .schemas import (
     ChatRequest,
@@ -31,6 +31,8 @@ from .schemas import (
     ClassifyRequest,
     ClassifyResponse,
     Message,
+    Notification,
+    NotificationAck,
     RequestIntake,
     RequestIntakeResponse,
     SearchRequest,
@@ -47,9 +49,16 @@ log = logging.getLogger("rag")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    logging.basicConfig(level=settings.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    log.info("rag-api starting; llm=%s (%s) guardrails=%s qdrant=%s", settings.llm_model, settings.llm_base_url,
-             settings.guardrails_provider, settings.qdrant_url)
+    logging.basicConfig(
+        level=settings.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+    log.info(
+        "rag-api starting; llm=%s (%s) guardrails=%s qdrant=%s",
+        settings.llm_model,
+        settings.llm_base_url,
+        settings.guardrails_provider,
+        settings.qdrant_url,
+    )
     await asyncio.to_thread(memory.init_schema)
     yield
 
@@ -95,7 +104,11 @@ def info():
         "llm": {"model": settings.llm_model, "base_url": settings.llm_base_url},
         "embeddings": {"model": settings.embeddings_model, "base_url": settings.embeddings_base_url},
         "guardrails": {"provider": settings.guardrails_provider, "model": settings.guardrails_model},
-        "retrieval": {"collection": settings.qdrant_collection, "top_k": settings.rag_top_k, "min_score": settings.rag_min_score},
+        "retrieval": {
+            "collection": settings.qdrant_collection,
+            "top_k": settings.rag_top_k,
+            "min_score": settings.rag_min_score,
+        },
         "memory": memory.enabled(),
         "voice": {"livekit_url": settings.livekit_public_url or settings.livekit_url},
     }
@@ -115,6 +128,18 @@ async def search(request: SearchRequest):
 @app.get("/v1/sessions/{session_id}/messages", response_model=list[Message])
 async def session_messages(session_id: str):
     return await asyncio.to_thread(memory.messages, session_id)
+
+
+@app.get("/v1/sessions/{session_id}/notifications", response_model=list[Notification])
+async def session_notifications(session_id: str):
+    """Undelivered outcome notices (ticket decisions) for the session; newest per ticket."""
+    return await asyncio.to_thread(notifications.pending, session_id)
+
+
+@app.post("/v1/sessions/{session_id}/notifications/ack")
+async def ack_notifications(session_id: str, data: NotificationAck):
+    await asyncio.to_thread(notifications.ack, session_id, data.ids)
+    return {"acknowledged": data.ids}
 
 
 @app.get("/v1/sessions/{session_id}/transcript", response_class=PlainTextResponse)

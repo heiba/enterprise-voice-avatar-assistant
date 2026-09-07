@@ -61,5 +61,6 @@ def citations_payload(reply: dict[str, Any], question: str | None = None) -> byt
             "answer": reply.get("answer", ""),
             "blocked": bool(reply.get("blocked")),
             "citations": reply.get("citations", []),
+            "ticket": reply.get("ticket"),
         }
     ).encode("utf-8")

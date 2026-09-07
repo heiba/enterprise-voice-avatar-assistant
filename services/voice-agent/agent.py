@@ -9,6 +9,7 @@ Run:  python agent.py start        (worker registers with LiveKit and joins new 
       python agent.py download-files
 """
 
+import asyncio
 import logging
 
 import openai as openai_sdk
@@ -133,6 +134,39 @@ async def entrypoint(ctx: JobContext) -> None:
     )
     if settings.greeting:
         await session.say(settings.greeting, allow_interruptions=True)
+
+    notices = asyncio.create_task(notification_loop(session, ctx.room, session_id))
+
+    async def stop_notices() -> None:
+        notices.cancel()
+
+    ctx.add_shutdown_callback(stop_notices)
+
+
+async def notification_loop(session: AgentSession, room: rtc.Room, session_id: str) -> None:
+    """Speak outcome notices (ticket decisions made in Slack) as they arrive for this session."""
+    while True:
+        await asyncio.sleep(settings.notification_poll_seconds)
+        try:
+            pending = await rag_client.pending_notifications(session_id)
+        except Exception as exc:  # noqa: BLE001 - polling must survive transient API errors
+            log.debug("notification poll failed for session %s: %s", session_id, exc)
+            continue
+        for notice in pending:
+            text = str(notice.get("text") or "")
+            if not text:
+                continue
+            log.info("session=%s speaking notice for %s", session_id, notice.get("ticket_ref"))
+            try:
+                await rag_client.ack_notifications(session_id, [int(notice["id"])])
+                await room.local_participant.publish_data(
+                    helpers.citations_payload({"session_id": session_id, "answer": text}),
+                    reliable=True,
+                    topic="assistant",
+                )
+                await session.say(helpers.speakable(text), allow_interruptions=True)
+            except Exception:
+                log.exception("could not deliver notice %s for session %s", notice.get("id"), session_id)
 
 
 if __name__ == "__main__":

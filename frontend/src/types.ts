@@ -16,6 +16,14 @@ export interface GuardrailInfo {
   category: string | null;
 }
 
+export interface TicketSummary {
+  ticket_ref: string;
+  title: string;
+  status: string;
+  category: string | null;
+  priority: string;
+}
+
 export interface ChatResponse {
   session_id: string;
   answer: string;
@@ -23,6 +31,15 @@ export interface ChatResponse {
   blocked: boolean;
   guardrail: GuardrailInfo;
   model: string;
+  ticket?: TicketSummary | null;
+}
+
+/** An outcome notice for the session, for example a ticket decision made in Slack. */
+export interface Notification {
+  id: number;
+  ticket_ref: string | null;
+  kind: string;
+  text: string;
 }
 
 export interface ChatMessage {
@@ -34,6 +51,8 @@ export interface ChatMessage {
   pending?: boolean;
   error?: boolean;
   voice?: boolean;
+  ticket?: TicketSummary | null;
+  notice?: boolean;
 }
 
 export interface Info {
@@ -61,4 +80,5 @@ export interface AssistantTurn {
   answer: string;
   blocked: boolean;
   citations: Citation[];
+  ticket?: TicketSummary | null;
 }

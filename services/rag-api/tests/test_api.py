@@ -19,9 +19,18 @@ def test_healthz_and_info():
 
 
 def test_chat_returns_answer_with_citations(monkeypatch):
-    monkeypatch.setattr(retrieval, "search", lambda q, top_k=None, min_score=None: [
-        Hit(doc_id="d1", source="password-policy.md", text="Administrator passwords must be rotated every 90 days.", score=0.8)
-    ])
+    monkeypatch.setattr(
+        retrieval,
+        "search",
+        lambda q, top_k=None, min_score=None: [
+            Hit(
+                doc_id="d1",
+                source="password-policy.md",
+                text="Administrator passwords must be rotated every 90 days.",
+                score=0.8,
+            )
+        ],
+    )
     monkeypatch.setattr(guardrails, "check_input", lambda text: Verdict(True, "none"))
     monkeypatch.setattr(guardrails, "check_output", lambda user, answer: Verdict(True, "none"))
 
@@ -46,7 +55,9 @@ def test_chat_returns_answer_with_citations(monkeypatch):
 
 
 def test_blocked_input_short_circuits(monkeypatch):
-    monkeypatch.setattr(guardrails, "check_input", lambda text: Verdict(False, "granite-guardian", category="harm"))
+    monkeypatch.setattr(
+        guardrails, "check_input", lambda text: Verdict(False, "granite-guardian", category="harm")
+    )
     called = []
     monkeypatch.setattr(retrieval, "search", lambda *a, **k: called.append(1))
     with TestClient(app) as client:

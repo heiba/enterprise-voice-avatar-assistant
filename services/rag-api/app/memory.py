@@ -49,6 +49,11 @@ def _run(query: str, params: tuple = (), fetch: bool = False):
         return [] if fetch else None
 
 
+def run(query: str, params: tuple = (), fetch: bool = False):
+    """Run one statement with the same graceful degradation as every other helper here."""
+    return _run(query, params, fetch)
+
+
 def ensure_conversation(session_id: str, user_id: str | None, channel: str) -> None:
     _run(
         """INSERT INTO conversations (session_id, user_id, channel) VALUES (%s, %s, %s)
@@ -67,7 +72,9 @@ def history(session_id: str, limit_messages: int) -> list[dict[str, str]]:
     return [{"role": r["role"], "content": r["content"]} for r in reversed(rows or [])]
 
 
-def append(session_id: str, role: str, content: str, citations: list[Any] | None = None, blocked: bool = False) -> None:
+def append(
+    session_id: str, role: str, content: str, citations: list[Any] | None = None, blocked: bool = False
+) -> None:
     payload = json.dumps([c.model_dump() if hasattr(c, "model_dump") else c for c in (citations or [])])
     _run(
         "INSERT INTO messages (session_id, role, content, citations, blocked) VALUES (%s, %s, %s, %s::jsonb, %s)",
@@ -113,7 +120,9 @@ def delete_user_memory(user_id: str, key: str) -> None:
     _run("DELETE FROM user_memory WHERE user_id = %s AND key = %s", (user_id, key))
 
 
-def record_extraction(doc_id: str, source: str, source_uri: str, doc_type: str, extracted: dict[str, Any]) -> None:
+def record_extraction(
+    doc_id: str, source: str, source_uri: str, doc_type: str, extracted: dict[str, Any]
+) -> None:
     _run(
         """INSERT INTO documents (doc_id, source, source_uri, doc_type, extracted)
            VALUES (%s, %s, %s, %s, %s::jsonb)

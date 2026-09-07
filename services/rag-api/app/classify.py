@@ -17,11 +17,11 @@ log = logging.getLogger("rag.classify")
 DOC_TYPES = ["invoice", "contract", "purchase_order", "policy", "receipt", "other"]
 FIELDS = {
     "invoice": "vendor, vendor_address, customer, invoice_number, invoice_date, due_date, currency, subtotal, tax, "
-               "total_amount, line_items (list of {description, quantity, unit_price, amount}), payment_terms",
+    "total_amount, line_items (list of {description, quantity, unit_price, amount}), payment_terms",
     "contract": "title, parties (list), effective_date, expiry_date, term, total_value, currency, governing_law, "
-                "auto_renewal (bool), notice_period, signatories (list)",
+    "auto_renewal (bool), notice_period, signatories (list)",
     "purchase_order": "po_number, vendor, buyer, order_date, delivery_date, currency, total_amount, "
-                      "items (list of {description, quantity, unit_price, amount})",
+    "items (list of {description, quantity, unit_price, amount})",
     "policy": "title, owner, version, effective_date, scope, key_rules (list)",
     "receipt": "merchant, date, currency, total_amount, payment_method, items (list)",
     "other": "title, date, author, key_points (list)",
@@ -46,7 +46,9 @@ def _prompt(text: str, filename: str | None) -> list[dict[str, str]]:
     hints = "\n".join(f"- {t}: {FIELDS[t]}" for t in DOC_TYPES)
     system = (
         "You classify business documents and extract structured fields. Respond with a single JSON object and nothing else, "
-        'with keys: "doc_type" (one of ' + ", ".join(DOC_TYPES) + '), "confidence" (0 to 1), "summary" (one sentence), '
+        'with keys: "doc_type" (one of '
+        + ", ".join(DOC_TYPES)
+        + '), "confidence" (0 to 1), "summary" (one sentence), '
         '"fields" (object). Use these field names per document type; omit fields that are not present, never invent values:\n'
         + hints
         + "\nDates use ISO format (YYYY-MM-DD). Amounts are numbers without currency symbols."
@@ -68,7 +70,12 @@ def _parse_json(content: str) -> dict[str, Any]:
 
 def classify_text(text: str, filename: str | None = None) -> dict[str, Any]:
     messages = _prompt(text, filename)
-    kwargs: dict[str, Any] = {"model": settings.llm_model, "messages": messages, "temperature": 0, "max_tokens": 1200}
+    kwargs: dict[str, Any] = {
+        "model": settings.llm_model,
+        "messages": messages,
+        "temperature": 0,
+        "max_tokens": 1200,
+    }
     try:
         completion = clients.llm().chat.completions.create(response_format={"type": "json_object"}, **kwargs)
     except Exception as exc:  # noqa: BLE001
@@ -83,7 +90,12 @@ def classify_text(text: str, filename: str | None = None) -> dict[str, Any]:
     except (TypeError, ValueError):
         confidence = 0.0
     fields = data.get("fields") if isinstance(data.get("fields"), dict) else {}
-    return {"doc_type": doc_type, "confidence": confidence, "summary": str(data.get("summary", "")), "fields": fields}
+    return {
+        "doc_type": doc_type,
+        "confidence": confidence,
+        "summary": str(data.get("summary", "")),
+        "fields": fields,
+    }
 
 
 def classify_document(request: ClassifyRequest) -> ClassifyResponse:

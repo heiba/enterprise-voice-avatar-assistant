@@ -67,7 +67,9 @@ def _check(messages: list[dict[str, str]], plain_text: str) -> Verdict:
             if flagged is None:
                 log.warning("granite guardian returned no verdict: %r", content[:120])
                 return Verdict(allowed=settings.guardrails_fail_open, provider=provider, raw=content)
-            return Verdict(allowed=not flagged, provider=provider, category="harm" if flagged else None, raw=content)
+            return Verdict(
+                allowed=not flagged, provider=provider, category="harm" if flagged else None, raw=content
+            )
         if provider == "llama-guard":
             content = _chat(messages)
             flagged, category = parse_llama_guard(content)
@@ -77,8 +79,12 @@ def _check(messages: list[dict[str, str]], plain_text: str) -> Verdict:
         log.warning("unknown guardrails provider %s; allowing", provider)
         return Verdict(allowed=True, provider=provider)
     except Exception as exc:  # noqa: BLE001
-        log.warning("guardrails provider %s failed (%s); fail_open=%s", provider, exc, settings.guardrails_fail_open)
-        return Verdict(allowed=settings.guardrails_fail_open, provider=provider, category="error", raw=str(exc)[:200])
+        log.warning(
+            "guardrails provider %s failed (%s); fail_open=%s", provider, exc, settings.guardrails_fail_open
+        )
+        return Verdict(
+            allowed=settings.guardrails_fail_open, provider=provider, category="error", raw=str(exc)[:200]
+        )
 
 
 def _chat(messages: list[dict[str, str]]) -> str:
@@ -96,5 +102,7 @@ def _trustyai(text: str) -> Verdict:
         detections = response.json().get("detections") or []
     if detections:
         first = detections[0]
-        return Verdict(allowed=False, provider="trustyai", category=first.get("detection_type") or first.get("detection"))
+        return Verdict(
+            allowed=False, provider="trustyai", category=first.get("detection_type") or first.get("detection")
+        )
     return Verdict(allowed=True, provider="trustyai")

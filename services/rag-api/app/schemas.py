@@ -17,7 +17,9 @@ class Citation(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
-    session_id: str | None = Field(default=None, description="Conversation id; a new one is created when omitted")
+    session_id: str | None = Field(
+        default=None, description="Conversation id; a new one is created when omitted"
+    )
     user_id: str | None = None
     mode: Literal["text", "voice"] = "text"
     top_k: int | None = Field(default=None, ge=1, le=20)
@@ -37,6 +39,8 @@ class ChatResponse(BaseModel):
     blocked: bool = False
     guardrail: GuardrailInfo
     model: str
+    # Set when the message was a service request and a ticket was filed instead of answering
+    ticket: "Ticket | None" = None
 
 
 class SearchRequest(BaseModel):
@@ -143,3 +147,19 @@ class VoiceTokenResponse(BaseModel):
     room: str
     identity: str
     session_id: str
+
+
+class Notification(BaseModel):
+    id: int
+    session_id: str
+    ticket_ref: str | None = None
+    kind: str = "ticket_update"
+    text: str
+    created_at: datetime
+
+
+class NotificationAck(BaseModel):
+    ids: list[int]
+
+
+ChatResponse.model_rebuild()

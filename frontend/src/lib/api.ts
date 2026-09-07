@@ -1,4 +1,4 @@
-import type { ChatResponse, Info, VoiceToken } from "../types";
+import type { ChatResponse, Info, Notification, VoiceToken } from "../types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
@@ -37,3 +37,15 @@ export function voiceToken(params: { session_id: string; identity: string; name?
   if (params.name) query.set("name", params.name);
   return request<VoiceToken>(`/v1/voice/token?${query.toString()}`);
 }
+
+export function notifications(sessionId: string) {
+  return request<Notification[]>(`/v1/sessions/${encodeURIComponent(sessionId)}/notifications`);
+}
+
+export function ackNotifications(sessionId: string, ids: number[]) {
+  return request<{ acknowledged: number[] }>(`/v1/sessions/${encodeURIComponent(sessionId)}/notifications/ack`, {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+}
+

@@ -88,6 +88,12 @@ export function ChatPanel({ messages, busy, onSend, onCite, onSelectMessage }: P
             <header>
               {msg.role === "user" ? "You" : "Assistant"}
               {msg.voice && <span className="tag voice-tag">voice</span>}
+              {msg.notice && <span className="tag notice-tag">update</span>}
+              {msg.ticket && (
+                <span className="tag ticket-tag" title={msg.ticket.title}>
+                  {msg.ticket.ticket_ref} · {msg.ticket.status.replace("_", " ")}
+                </span>
+              )}
               {msg.blocked && <span className="tag">blocked by guardrails</span>}
             </header>
             {msg.pending ? (

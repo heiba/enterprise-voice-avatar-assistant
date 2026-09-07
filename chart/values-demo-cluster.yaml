@@ -11,10 +11,11 @@ images:
 
 frontend:
   enabled: false
-ragApi:
-  enabled: false
 voiceAgent:
   enabled: false
+ragApi:
+  enabled: true
+  image: ghcr.io/heiba/assistant-rag-api:latest
 ingestion:
   enabled: true
   image: ghcr.io/heiba/assistant-ingestion:sha-5cb88ff

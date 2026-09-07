@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [ingestion]
+        service: [ingestion, rag-api]
     defaults:
       run:
         working-directory: services/${{ matrix.service }}

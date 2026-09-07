@@ -1,0 +1,28 @@
+[project]
+name = "rag-api"
+version = "0.1.0"
+description = "RAG, memory, guardrails, classification, and tickets API for the enterprise voice avatar assistant"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic-settings>=2.5",
+  "httpx>=0.27",
+  "openai>=1.50",
+  "qdrant-client>=1.12",
+  "psycopg[binary]>=3.2",
+  "livekit-api>=1.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 110
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

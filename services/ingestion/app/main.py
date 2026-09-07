@@ -7,6 +7,7 @@ Endpoints
   POST /v1/ingest/upload        upload a file; it is stored in the bucket and ingested (202)
   POST /v1/events/minio         MinIO bucket notification webhook (created -> ingest, removed -> delete)
   GET  /v1/jobs, /v1/jobs/{id}  job status
+  POST /v1/extract              convert one object and return its text as Markdown (for classification)
   GET  /v1/documents            documents known to the database (501 without a database)
   DELETE /v1/documents/{doc_id} remove a document's vectors and record
 """
@@ -23,8 +24,16 @@ from . import db, storage, vectorstore
 from .config import settings
 from .events import CREATED, REMOVED, parse_minio_event
 from .jobs import Job, JobManager
-from .pipeline import make_doc_id
-from .schemas import DocumentInfo, EventResponse, IngestAccepted, IngestRequest, JobStatus
+from .pipeline import extract_text, make_doc_id
+from .schemas import (
+    DocumentInfo,
+    EventResponse,
+    ExtractRequest,
+    ExtractResponse,
+    IngestAccepted,
+    IngestRequest,
+    JobStatus,
+)
 
 log = logging.getLogger("ingestion")
 jobs = JobManager(max_concurrent=settings.max_concurrent_jobs)
@@ -99,6 +108,16 @@ async def minio_event(event: dict):
             await asyncio.to_thread(db.delete_document, doc_id)
             response.deleted.append(doc_id)
     return response
+
+
+@app.post("/v1/extract", response_model=ExtractResponse)
+async def extract(request: ExtractRequest):
+    bucket = request.bucket or settings.s3_bucket
+    try:
+        result = await asyncio.to_thread(extract_text, bucket, request.key, request.max_chars)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"could not extract text: {type(exc).__name__}: {exc}"[:300]) from exc
+    return ExtractResponse(doc_id=make_doc_id(bucket, request.key), source=request.key, **result)
 
 
 @app.get("/v1/jobs", response_model=list[JobStatus])

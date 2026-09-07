@@ -93,6 +93,23 @@ def chunk(document) -> list[Chunk]:
     return chunks
 
 
+def extract_text(bucket: str, key: str, max_chars: int = 60000) -> dict[str, Any]:
+    """Convert one object and return its content as Markdown (used for classification and extraction)."""
+    path = storage.download(bucket, key)
+    try:
+        document = convert(path)
+        text = document.export_to_markdown()
+        truncated = len(text) > max_chars
+        pages = None
+        try:
+            pages = len(document.pages) if getattr(document, "pages", None) else None
+        except TypeError:
+            pages = None
+        return {"text": text[:max_chars], "truncated": truncated, "pages": pages}
+    finally:
+        shutil.rmtree(path.parent, ignore_errors=True)
+
+
 def ingest_document(bucket: str, key: str, doc_id: str, metadata: dict[str, Any]) -> dict[str, Any]:
     """Run the full pipeline for one object. Returns chunk and page counts."""
     path = storage.download(bucket, key)

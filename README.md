@@ -350,7 +350,7 @@ Target layout. Directories marked *planned* are not in the repository yet.
 ├── n8n/workflows/                # planned: exported workflow JSON
 ├── frontend/                     # planned: React + LiveKit chat and avatar UI
 ├── services/
-│   ├── rag-api/                  # planned: retrieval, memory, guardrails, classification, tickets
+│   ├── rag-api/                  # retrieval, memory, guardrails, classification, tickets (FastAPI)
 │   ├── ingestion/                # Docling parsing, chunking, embeddings, Qdrant upsert (FastAPI)
 │   └── voice-agent/              # planned: LiveKit Agents worker (STT, RAG API, TTS, avatar)
 ├── data/sample-docs/             # Synthetic sample documents for the demo

@@ -1,0 +1,193 @@
+"""RAG API.
+
+  GET  /healthz, /readyz
+  POST /v1/chat                       grounded answer with citations, memory, guardrails (text or voice mode)
+  POST /v1/search                     retrieval only
+  GET  /v1/sessions/{id}/messages     conversation history
+  GET  /v1/sessions/{id}/transcript   plain-text transcript (for archival workflows)
+  DELETE /v1/sessions/{id}            forget a conversation
+  GET/PUT/DELETE /v1/users/{id}/memory   long-lived facts injected into prompts
+  POST /v1/classify                   document type and fields (text, or bucket/key via the ingestion service)
+  POST /v1/tickets, GET /v1/tickets, GET /v1/tickets/{ref}, PATCH /v1/tickets/{ref}
+  POST /v1/requests                   service request intake: classify, create ticket, notify n8n
+  GET  /v1/voice/token                LiveKit token for the browser
+  GET  /v1/info                       active models and providers (for the diagnostics panel)
+"""
+
+import asyncio
+import logging
+import uuid
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, PlainTextResponse
+
+from . import classify, clients, memory, rag, retrieval, tickets, voice
+from .config import settings
+from .schemas import (
+    ChatRequest,
+    ChatResponse,
+    ClassifyRequest,
+    ClassifyResponse,
+    Message,
+    RequestIntake,
+    RequestIntakeResponse,
+    SearchRequest,
+    SearchResponse,
+    Ticket,
+    TicketCreate,
+    TicketUpdate,
+    UserMemoryItem,
+    VoiceTokenResponse,
+)
+
+log = logging.getLogger("rag")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    logging.basicConfig(level=settings.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    log.info("rag-api starting; llm=%s (%s) guardrails=%s qdrant=%s", settings.llm_model, settings.llm_base_url,
+             settings.guardrails_provider, settings.qdrant_url)
+    await asyncio.to_thread(memory.init_schema)
+    yield
+
+
+app = FastAPI(title="Enterprise voice avatar assistant - RAG API", version="0.1.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",")],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.exception_handler(tickets.TicketError)
+async def ticket_error(_, exc: tickets.TicketError):
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+async def readyz():
+    problems: dict[str, str] = {}
+    checks = {"qdrant": lambda: clients.qdrant().get_collections()}
+    if memory.enabled():
+        checks["database"] = lambda: clients.db().close()
+    for name, check in checks.items():
+        try:
+            await asyncio.to_thread(check)
+        except Exception as exc:  # noqa: BLE001
+            problems[name] = str(exc)[:200]
+    if problems:
+        return JSONResponse(status_code=503, content={"status": "not ready", "problems": problems})
+    return {"status": "ready"}
+
+
+@app.get("/v1/info")
+def info():
+    return {
+        "llm": {"model": settings.llm_model, "base_url": settings.llm_base_url},
+        "embeddings": {"model": settings.embeddings_model, "base_url": settings.embeddings_base_url},
+        "guardrails": {"provider": settings.guardrails_provider, "model": settings.guardrails_model},
+        "retrieval": {"collection": settings.qdrant_collection, "top_k": settings.rag_top_k, "min_score": settings.rag_min_score},
+        "memory": memory.enabled(),
+        "voice": {"livekit_url": settings.livekit_public_url or settings.livekit_url},
+    }
+
+
+@app.post("/v1/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest):
+    return await asyncio.to_thread(rag.answer, request)
+
+
+@app.post("/v1/search", response_model=SearchResponse)
+async def search(request: SearchRequest):
+    hits = await asyncio.to_thread(retrieval.search, request.query, request.top_k, request.min_score)
+    return SearchResponse(hits=[h.to_citation(n) for n, h in enumerate(hits, start=1)])
+
+
+@app.get("/v1/sessions/{session_id}/messages", response_model=list[Message])
+async def session_messages(session_id: str):
+    return await asyncio.to_thread(memory.messages, session_id)
+
+
+@app.get("/v1/sessions/{session_id}/transcript", response_class=PlainTextResponse)
+async def session_transcript(session_id: str):
+    return await asyncio.to_thread(memory.transcript, session_id)
+
+
+@app.delete("/v1/sessions/{session_id}")
+async def delete_session(session_id: str):
+    await asyncio.to_thread(memory.clear, session_id)
+    return {"deleted": session_id}
+
+
+@app.get("/v1/users/{user_id}/memory")
+async def get_user_memory(user_id: str):
+    return await asyncio.to_thread(memory.get_user_memory, user_id)
+
+
+@app.put("/v1/users/{user_id}/memory")
+async def put_user_memory(user_id: str, item: UserMemoryItem):
+    await asyncio.to_thread(memory.set_user_memory, user_id, item.key, item.value)
+    return {"user_id": user_id, item.key: item.value}
+
+
+@app.delete("/v1/users/{user_id}/memory/{key}")
+async def delete_user_memory(user_id: str, key: str):
+    await asyncio.to_thread(memory.delete_user_memory, user_id, key)
+    return {"deleted": key}
+
+
+@app.post("/v1/classify", response_model=ClassifyResponse)
+async def classify_document(request: ClassifyRequest):
+    try:
+        return await asyncio.to_thread(classify.classify_document, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/v1/tickets", response_model=Ticket, status_code=201)
+async def create_ticket(data: TicketCreate):
+    return await asyncio.to_thread(tickets.create, data)
+
+
+@app.get("/v1/tickets", response_model=list[Ticket])
+async def list_tickets(status: str | None = None, limit: int = Query(default=50, ge=1, le=500)):
+    return await asyncio.to_thread(tickets.list_tickets, status, limit)
+
+
+@app.get("/v1/tickets/{ref}", response_model=Ticket)
+async def get_ticket(ref: str):
+    return await asyncio.to_thread(tickets.get, ref)
+
+
+@app.patch("/v1/tickets/{ref}", response_model=Ticket)
+async def update_ticket(ref: str, data: TicketUpdate):
+    return await asyncio.to_thread(tickets.update, ref, data)
+
+
+@app.post("/v1/requests", response_model=RequestIntakeResponse, status_code=201)
+async def request_intake(request: RequestIntake):
+    ticket, classification, notified = await asyncio.to_thread(tickets.intake, request)
+    return RequestIntakeResponse(ticket=ticket, classification=classification, notified=notified)
+
+
+@app.get("/v1/voice/token", response_model=VoiceTokenResponse)
+def voice_token(session_id: str | None = None, identity: str | None = None, name: str | None = None):
+    session_id = session_id or uuid.uuid4().hex
+    identity = identity or f"user-{uuid.uuid4().hex[:8]}"
+    room = voice.room_for_session(session_id)
+    return VoiceTokenResponse(
+        token=voice.mint_token(identity, room, name),
+        url=settings.livekit_public_url or settings.livekit_url,
+        room=room,
+        identity=identity,
+        session_id=session_id,
+    )

@@ -16,6 +16,7 @@ its previous chunks.
 | POST | `/v1/ingest/upload` | multipart `file` (and optional `bucket`); stored in the bucket, then ingested |
 | POST | `/v1/events/minio` | MinIO bucket notification webhook; created objects are ingested, removed ones deleted |
 | GET | `/v1/jobs`, `/v1/jobs/{id}` | job status: `queued`, `running`, `done`, `failed` |
+| POST | `/v1/extract` | `{"key": "inbox/invoice.pdf", "bucket": "inbox"}` → the document's text as Markdown, for classification |
 | GET | `/v1/documents` | documents recorded in PostgreSQL (501 when no database is configured) |
 | DELETE | `/v1/documents/{doc_id}` | remove a document's vectors and record |
 

@@ -37,3 +37,20 @@ def test_markdown_is_chunked_with_headings(tmp_path: Path):
     assert "25 days" in joined
     assert any("Sick leave" in c.text or "Sick leave" in " ".join(c.headings) for c in chunks)
     assert all(c.index == i for i, c in enumerate(chunks))
+
+
+def test_markdown_export_roundtrip(tmp_path: Path, monkeypatch):
+    """extract_text downloads through storage; stub the download and check the Markdown export."""
+    from app import pipeline
+
+    path = tmp_path / "doc" / "leave-policy.md"
+    path.parent.mkdir()
+    path.write_text(SAMPLE)
+    monkeypatch.setattr(pipeline.storage, "download", lambda bucket, key: path)
+    try:
+        result = pipeline.extract_text("documents", "leave-policy.md", max_chars=100)
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"docling unavailable: {exc}")
+    assert result["truncated"] is True
+    assert len(result["text"]) == 100
+    assert "Leave policy" in result["text"]

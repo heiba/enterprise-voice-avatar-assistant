@@ -1,0 +1,18 @@
+FROM registry.access.redhat.com/ubi9/python-312:latest
+
+ENV UV_CACHE_DIR=/tmp/uv-cache \
+    UV_LINK_MODE=copy \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /opt/app-root/src
+
+COPY --chown=1001:0 pyproject.toml uv.lock ./
+RUN pip install --no-cache-dir uv \
+ && uv sync --frozen --no-dev \
+ && rm -rf /tmp/uv-cache
+
+COPY --chown=1001:0 app ./app
+COPY --chown=1001:0 sql ./sql
+
+EXPOSE 8080
+CMD [".venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

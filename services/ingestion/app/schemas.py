@@ -36,6 +36,20 @@ class EventResponse(BaseModel):
     ignored: list[str] = Field(default_factory=list)
 
 
+class ExtractRequest(BaseModel):
+    key: str
+    bucket: str | None = None
+    max_chars: int = Field(default=60000, ge=1000, le=500000)
+
+
+class ExtractResponse(BaseModel):
+    doc_id: str
+    source: str
+    pages: int | None = None
+    truncated: bool = False
+    text: str = Field(description="Document content exported as Markdown")
+
+
 class DocumentInfo(BaseModel):
     doc_id: str
     source: str

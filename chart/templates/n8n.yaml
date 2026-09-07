@@ -38,6 +38,7 @@ spec:
         {{- include "assistant.componentLabels" (dict "root" . "name" "n8n") | nindent 8 }}
     spec:
       enableServiceLinks: false
+      terminationGracePeriodSeconds: 60
       containers:
         - name: n8n
           image: {{ .Values.n8n.image }}
@@ -104,6 +105,8 @@ spec:
               value: {{ .Values.n8n.payloadSizeMaxMb | quote }}
             - name: GENERIC_TIMEZONE
               value: {{ .Values.n8n.timezone | quote }}
+            - name: TZ
+              value: {{ .Values.n8n.timezone | quote }}
             # Service URLs the exported workflows read through $env
             - name: RAG_API_URL
               value: http://rag-api:8080
@@ -119,17 +122,22 @@ spec:
             - name: http
               containerPort: 5678
               protocol: TCP
+          # First start runs database migrations; the startup probe gives it up to 5 minutes.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
           readinessProbe:
             httpGet:
               path: /healthz
               port: http
-            initialDelaySeconds: 20
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /healthz
               port: http
-            initialDelaySeconds: 60
             periodSeconds: 20
           resources:
             {{- toYaml .Values.n8n.resources | nindent 12 }}

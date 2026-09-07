@@ -45,6 +45,13 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.minio }}
                   key: MINIO_ROOT_PASSWORD
+            {{- if .Values.qdrant.apiKeySecret }}
+            - name: QDRANT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.qdrant.apiKeySecret }}
+                  key: QDRANT_API_KEY
+            {{- end }}
           ports:
             - name: http
               containerPort: 8080

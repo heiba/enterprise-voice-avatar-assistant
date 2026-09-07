@@ -1,4 +1,5 @@
 {{- if .Values.qdrant.enabled }}
+{{- $host := include "assistant.publicHost" (dict "root" . "name" "qdrant" "override" .Values.qdrant.publicHost) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -48,6 +49,13 @@ spec:
               value: /qdrant/snapshots
             - name: QDRANT__TELEMETRY_DISABLED
               value: "true"
+            {{- if .Values.qdrant.apiKeySecret }}
+            - name: QDRANT__SERVICE__API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.qdrant.apiKeySecret }}
+                  key: QDRANT_API_KEY
+            {{- end }}
           ports:
             - name: http
               containerPort: 6333
@@ -99,4 +107,25 @@ spec:
     - name: grpc
       port: 6334
       targetPort: grpc
+{{- if .Values.qdrant.route }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: qdrant
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "qdrant") | nindent 4 }}
+spec:
+  {{- if $host }}
+  host: {{ $host }}
+  {{- end }}
+  to:
+    kind: Service
+    name: qdrant
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}
 {{- end }}

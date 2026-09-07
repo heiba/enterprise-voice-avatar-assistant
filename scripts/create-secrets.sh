@@ -20,6 +20,7 @@ MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-$(rand 16)}"
 N8N_ENCRYPTION_KEY="${N8N_ENCRYPTION_KEY:-$(rand 32)}"
 LIVEKIT_API_KEY="${LIVEKIT_API_KEY:-APIk$(rand 6)}"
 LIVEKIT_API_SECRET="${LIVEKIT_API_SECRET:-$(rand 24)}"
+QDRANT_API_KEY="${QDRANT_API_KEY:-$(rand 24)}"
 
 make_secret() {
   local name="$1"; shift
@@ -45,6 +46,10 @@ make_secret assistant-minio \
 
 make_secret assistant-n8n \
   --from-literal=N8N_ENCRYPTION_KEY="${N8N_ENCRYPTION_KEY}"
+
+# Optional: used when qdrant.apiKeySecret is set in the chart values.
+make_secret assistant-qdrant \
+  --from-literal=QDRANT_API_KEY="${QDRANT_API_KEY}"
 
 make_secret assistant-livekit \
   --from-literal=LIVEKIT_API_KEY="${LIVEKIT_API_KEY}" \

@@ -142,6 +142,10 @@ metadata:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-weight: "5"
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    # Argo CD: run during the sync phase (PostSync would wait for every resource,
+    # including slow model pods, to be healthy first).
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
 spec:
   backoffLimit: 10
   template:

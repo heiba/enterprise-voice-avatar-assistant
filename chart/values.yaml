@@ -59,6 +59,14 @@ qdrant:
   image: docker.io/qdrant/qdrant:v1.19.1
   collection: documents
   storage: 10Gi
+  # Name of a Secret with key QDRANT_API_KEY. When set, Qdrant requires the key
+  # and the application services receive it. scripts/create-secrets.sh creates
+  # assistant-qdrant for this purpose.
+  apiKeySecret: ""
+  # Expose the Qdrant HTTP API and dashboard (/dashboard) through a Route.
+  # Only enable together with apiKeySecret.
+  route: false
+  publicHost: ""
   resources:
     requests:
       cpu: 250m
@@ -94,6 +102,8 @@ minio:
 n8n:
   enabled: true
   image: ghcr.io/n8n-io/n8n:2.37.11
+  # Maximum webhook payload in MiB.
+  payloadSizeMaxMb: 16
   # Public hostname. Computed from global.domain when empty.
   publicHost: ""
   storage: 5Gi

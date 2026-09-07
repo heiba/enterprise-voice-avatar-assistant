@@ -29,6 +29,11 @@ models:
     provider: granite-guardian
     deploy: true
 
+# Qdrant dashboard for the demo (protected by the API key from assistant-qdrant).
+qdrant:
+  apiKeySecret: assistant-qdrant
+  route: true
+
 livekit:
   turn:
     # Enable after copying the cluster wildcard certificate into the namespace

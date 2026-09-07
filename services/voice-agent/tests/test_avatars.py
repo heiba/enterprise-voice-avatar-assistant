@@ -31,3 +31,19 @@ def test_tavus_requires_face_and_key(monkeypatch):
     monkeypatch.setattr(settings, "tavus_replica_id", "r3f4182ef554")  # old name still accepted
     with pytest.raises(RuntimeError, match="TAVUS_API_KEY"):
         avatars.build()
+
+
+def test_start_kwargs_uses_public_livekit_url(monkeypatch):
+    class Provider:
+        async def start(self, session, *, room, livekit_url=None, livekit_api_key=None):
+            pass
+
+    class Legacy:
+        async def start(self, session, *, room):
+            pass
+
+    monkeypatch.setattr(settings, "livekit_public_url", "wss://livekit.example.com")
+    assert avatars.start_kwargs(Provider()) == {"livekit_url": "wss://livekit.example.com"}
+    assert avatars.start_kwargs(Legacy()) == {}
+    monkeypatch.setattr(settings, "livekit_public_url", None)
+    assert avatars.start_kwargs(Provider()) == {}

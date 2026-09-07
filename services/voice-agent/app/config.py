@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     livekit_url: str = "ws://localhost:7880"
     livekit_api_key: str = "devkey"
     livekit_api_secret: str = "secret"
+    # Public wss:// URL of the LiveKit Route; cloud avatar providers join the room through it
+    livekit_public_url: str | None = None
     # The worker's HTTP port, used for the health probe
     agent_port: int = 8081
 

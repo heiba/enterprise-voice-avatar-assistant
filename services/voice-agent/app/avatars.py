@@ -66,12 +66,33 @@ def build() -> Any | None:
     return None
 
 
+def start_kwargs(avatar: Any) -> dict[str, Any]:
+    """Extra arguments for the provider's start(): cloud providers must join the room through the
+    public LiveKit URL, not the in-cluster address this worker registers with."""
+    import inspect
+
+    kwargs: dict[str, Any] = {}
+    try:
+        params = inspect.signature(avatar.start).parameters
+    except (TypeError, ValueError):
+        return kwargs
+    if "livekit_url" in params and settings.livekit_public_url:
+        kwargs["livekit_url"] = settings.livekit_public_url
+    return kwargs
+
+
 async def start(session: Any, room: Any) -> Any | None:
     """Build and start the avatar for this room. The avatar publishes the agent's audio and its video."""
     avatar = build()
     if avatar is None:
         log.info("no avatar provider configured; publishing audio only")
         return None
-    await avatar.start(session, room=room)
+    kwargs = start_kwargs(avatar)
+    log.info(
+        "starting avatar provider %s (livekit url for the provider: %s)",
+        provider(),
+        kwargs.get("livekit_url", "default"),
+    )
+    await avatar.start(session, room=room, **kwargs)
     log.info("avatar provider %s started", provider())
     return avatar

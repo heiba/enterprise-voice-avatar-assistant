@@ -50,7 +50,8 @@ Demo links will be added once the stack has been validated on a cluster.
 
 ![Architecture diagram showing the frontend, voice agent, RAG service, n8n workflows, datastores, and models served on OpenShift AI](docs/images/architecture-overview.png)
 
-The PNG above is pending. The diagram below shows the same flow and renders directly on GitHub.
+<details>
+<summary>Diagram source (Mermaid)</summary>
 
 ```mermaid
 flowchart LR
@@ -59,13 +60,21 @@ flowchart LR
   end
   subgraph OpenShift["OpenShift project (one Helm release)"]
     LK[LiveKit server]
-    VA[Voice agent<br/>STT, RAG, TTS, avatar]
+    VA[Voice agent]
     RAG[RAG API<br/>retrieval, memory, guardrails,<br/>classification, tickets]
     ING[Ingestion service<br/>Docling, chunking, embeddings]
     N8N[n8n workflows]
+    S3[(MinIO / ODF S3)]
     PG[(PostgreSQL)]
     QD[(Qdrant)]
-    S3[(MinIO / ODF S3)]
+    LK <--> VA
+    VA --> RAG
+    S3 -- bucket event --> N8N
+    N8N --> ING
+    N8N <--> RAG
+    RAG --> PG
+    RAG --> QD
+    ING --> QD
   end
   subgraph RHOAI["OpenShift AI model serving (KServe / vLLM)"]
     LLM[LLM]
@@ -75,32 +84,21 @@ flowchart LR
     GR[Guardrails<br/>TrustyAI / Llama Guard]
   end
   subgraph External["External integrations (optional)"]
-    SL[Slack]
-    GD[Google Docs]
     AV[Avatar provider<br/>Simli / HeyGen / Tavus]
     EL[ElevenLabs TTS]
+    SL[Slack]
+    GD[Google Docs]
   end
-  UI -- text --> RAG
   UI -- WebRTC --> LK
-  LK <--> VA
-  VA --> STT
-  VA --> TTS
-  VA --> RAG
-  VA -. optional .-> AV
-  VA -. optional .-> EL
-  RAG --> LLM
-  RAG --> EMB
-  RAG --> GR
-  RAG --> QD
-  RAG --> PG
-  S3 -- bucket event --> N8N
-  N8N --> ING
-  ING --> EMB
-  ING --> QD
-  N8N <--> RAG
-  N8N <--> SL
-  N8N <--> GD
+  UI -- text --> RAG
+  VA -- STT, TTS --> RHOAI
+  RAG -- LLM, embeddings, guardrails --> RHOAI
+  ING -- embeddings --> RHOAI
+  VA -. avatar, cloud TTS .-> External
+  N8N <-- approvals, transcripts --> External
 ```
+
+</details>
 
 How data moves through the system:
 

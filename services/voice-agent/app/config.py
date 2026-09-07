@@ -1,0 +1,67 @@
+"""Configuration. Every setting is an environment variable; names match the Helm chart's config map and secrets."""
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # LiveKit server (the worker registers here and joins rooms as they are created)
+    livekit_url: str = "ws://localhost:7880"
+    livekit_api_key: str = "devkey"
+    livekit_api_secret: str = "secret"
+    # The worker's HTTP port, used for the health probe
+    agent_port: int = 8081
+
+    # RAG API: every user turn goes through it so voice shares grounding, memory, and guardrails with text
+    rag_api_url: str = "http://rag-api:8080"
+    rag_timeout_seconds: float = 90.0
+
+    # Speech to text (OpenAI-compatible transcription endpoint, Whisper on vLLM)
+    stt_base_url: str = "http://localhost:8000/v1"
+    stt_model: str = "whisper-large-v3-turbo"
+    stt_api_key: str = "none"
+    stt_language: str = "en"
+
+    # Text to speech: openai (any OpenAI-compatible speech endpoint, Kokoro in the chart) or elevenlabs
+    tts_provider: str = "openai"
+    tts_base_url: str = "http://tts:8880/v1"
+    tts_model: str = "kokoro"
+    tts_voice: str = "af_heart"
+    tts_api_key: str = "none"
+    tts_speed: float = 1.0
+    elevenlabs_api_key: str | None = None
+    elevenlabs_voice_id: str | None = None
+    elevenlabs_model: str = "eleven_turbo_v2_5"
+
+    # Direct LLM, used only if the RAG API is unavailable
+    llm_base_url: str = "http://localhost:8080/v1"
+    llm_model: str = "llama-3.1-8b-instruct"
+    llm_api_key: str = "none"
+
+    # Avatar: none | simli | tavus | hedra
+    avatar_provider: str = "none"
+    simli_api_key: str | None = None
+    simli_face_id: str | None = None
+    tavus_replica_id: str | None = None
+    tavus_persona_id: str | None = None
+    tavus_api_key: str | None = None
+    hedra_api_key: str | None = None
+    hedra_avatar_image: str | None = None
+
+    # Extra CA bundle trusted for in-cluster endpoints served over TLS (OpenShift service CA)
+    service_ca_file: str | None = None
+
+    greeting: str = (
+        "Hello, I am the company assistant. Ask me about a policy, a procedure, or a request "
+        "and I will answer from our documents."
+    )
+    instructions: str = (
+        "You are a helpful voice assistant for employees. Keep answers short and natural to listen to."
+    )
+    # Seconds of silence before a user turn is considered finished
+    min_endpointing_delay: float = 0.5
+    log_level: str = "INFO"
+
+
+settings = Settings()

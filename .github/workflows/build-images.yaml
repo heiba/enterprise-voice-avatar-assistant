@@ -38,6 +38,9 @@ jobs:
           - service: frontend
             context: frontend
             values_key: frontend
+          - service: voice-agent
+            context: services/voice-agent
+            values_key: voiceAgent
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
     steps:
@@ -79,7 +82,7 @@ jobs:
           python3 - "$tag" "$owner" <<'PY'
           import re, sys, pathlib
           tag, owner = sys.argv[1], sys.argv[2]
-          services = {"ingestion": "ingestion", "ragApi": "rag-api", "frontend": "frontend"}   # values key -> image name suffix
+          services = {"ingestion": "ingestion", "ragApi": "rag-api", "frontend": "frontend", "voiceAgent": "voice-agent"}   # values key -> image name suffix
           p = pathlib.Path("chart/values-demo-cluster.yaml"); text = p.read_text()
           for key, name in services.items():
               image = f"ghcr.io/{owner}/assistant-{name}:{tag}"

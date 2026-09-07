@@ -1,0 +1,22 @@
+# Voice agent worker: LiveKit Agents with Whisper STT, RAG API answers, Kokoro TTS, optional avatar.
+FROM registry.access.redhat.com/ubi9/python-312:latest
+
+ENV UV_CACHE_DIR=/tmp/uv-cache \
+    UV_LINK_MODE=copy \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /opt/app-root/src
+
+COPY --chown=1001:0 pyproject.toml uv.lock ./
+RUN pip install --no-cache-dir uv \
+ && uv sync --frozen --no-dev \
+ && rm -rf /tmp/uv-cache
+
+COPY --chown=1001:0 app ./app
+COPY --chown=1001:0 agent.py ./
+
+# Fetch plugin model files (Silero VAD) at build time so the worker starts offline.
+RUN .venv/bin/python agent.py download-files
+
+EXPOSE 8081
+CMD [".venv/bin/python", "agent.py", "start"]

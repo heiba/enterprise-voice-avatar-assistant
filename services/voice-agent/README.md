@@ -1,0 +1,41 @@
+# Voice agent
+
+A [LiveKit Agents](https://docs.livekit.io/agents/) worker. It registers with
+the LiveKit server and joins every new room. For each user turn:
+
+1. Silero VAD detects the end of speech (users can interrupt the assistant).
+2. Whisper transcribes the audio through the OpenAI-compatible transcription API.
+3. The RAG API answers in voice mode, so voice shares grounding, memory, and
+   guardrails with text chat. The room name `session-<id>` maps to the RAG
+   session `<id>`, and the participant identity `user-<name>` to the user id.
+4. The answer and its citations are published on the room data channel
+   (topic `assistant`) for the UI, then spoken through the TTS endpoint.
+5. With an avatar provider configured, the provider publishes the audio and a
+   lip-synced video track instead of the agent publishing audio directly.
+
+## Configuration
+
+| Variable | Default | Notes |
+|---|---|---|
+| `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | dev defaults | LiveKit server |
+| `RAG_API_URL` | `http://rag-api:8080` | answers come from `/v1/chat` with `mode=voice` |
+| `STT_BASE_URL`, `STT_MODEL`, `STT_API_KEY`, `STT_LANGUAGE` | Whisper defaults | OpenAI-compatible transcription |
+| `TTS_PROVIDER` | `openai` | `openai` (any OpenAI-compatible speech API, Kokoro in the chart) or `elevenlabs` |
+| `TTS_BASE_URL`, `TTS_MODEL`, `TTS_VOICE`, `TTS_SPEED` | Kokoro defaults | |
+| `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL` | unset | when `TTS_PROVIDER=elevenlabs` |
+| `AVATAR_PROVIDER` | `none` | `none`, `simli`, `tavus`, `hedra` |
+| `SIMLI_API_KEY`, `SIMLI_FACE_ID` | unset | Simli avatar |
+| `TAVUS_API_KEY`, `TAVUS_REPLICA_ID`, `TAVUS_PERSONA_ID` | unset | Tavus avatar |
+| `HEDRA_API_KEY`, `HEDRA_AVATAR_IMAGE` | unset | Hedra avatar |
+| `SERVICE_CA_FILE` | unset | extra CA for in-cluster TLS endpoints |
+| `GREETING`, `MIN_ENDPOINTING_DELAY` | see `app/config.py` | |
+| `AGENT_PORT` | `8081` | health endpoint of the worker |
+
+## Run locally
+
+```bash
+uv sync
+uv run python agent.py download-files
+uv run python agent.py dev          # against a LiveKit dev server (livekit-server --dev)
+uv run pytest
+```

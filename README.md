@@ -352,7 +352,7 @@ Target layout. Directories marked *planned* are not in the repository yet.
 ├── services/
 │   ├── rag-api/                  # retrieval, memory, guardrails, classification, tickets (FastAPI)
 │   ├── ingestion/                # Docling parsing, chunking, embeddings, Qdrant upsert (FastAPI)
-│   └── voice-agent/              # planned: LiveKit Agents worker (STT, RAG API, TTS, avatar)
+│   └── voice-agent/              # LiveKit Agents worker (Whisper, RAG API, Kokoro, avatar providers)
 ├── data/sample-docs/             # Synthetic sample documents for the demo
 └── .github/workflows/            # CI: helm lint and tests; image builds published to ghcr.io
 ```

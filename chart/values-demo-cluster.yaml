@@ -10,7 +10,8 @@ images:
   registry: ghcr.io/heiba
 
 voiceAgent:
-  enabled: false
+  enabled: true
+  image: ghcr.io/heiba/assistant-voice-agent:latest
 frontend:
   enabled: true
   image: ghcr.io/heiba/assistant-frontend:sha-9f767b1

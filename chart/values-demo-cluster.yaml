@@ -14,16 +14,16 @@ voiceAgent:
   # Tavus renders the avatar from the agent audio; keys TAVUS_API_KEY and TAVUS_FACE_ID
   # live in the assistant-integrations secret (oc set data), never in this file.
   avatarProvider: tavus
-  image: ghcr.io/heiba/assistant-voice-agent:sha-49a8fe0
+  image: ghcr.io/heiba/assistant-voice-agent:sha-1fdbdcb
 frontend:
   enabled: true
-  image: ghcr.io/heiba/assistant-frontend:sha-49a8fe0
+  image: ghcr.io/heiba/assistant-frontend:sha-1fdbdcb
 ragApi:
   enabled: true
-  image: ghcr.io/heiba/assistant-rag-api:sha-49a8fe0
+  image: ghcr.io/heiba/assistant-rag-api:sha-1fdbdcb
 ingestion:
   enabled: true
-  image: ghcr.io/heiba/assistant-ingestion:sha-49a8fe0
+  image: ghcr.io/heiba/assistant-ingestion:sha-1fdbdcb
 
 models:
   # The LLM, embeddings, and guardrails come from this chart. Whisper reuses the

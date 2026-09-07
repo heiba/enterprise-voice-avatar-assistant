@@ -1,0 +1,40 @@
+# Local planning files (never committed)
+project-tasks.csv
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+kubeconfig*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Helm
+deploy/helm/charts/
+*.tgz
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.example.tfvars
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/

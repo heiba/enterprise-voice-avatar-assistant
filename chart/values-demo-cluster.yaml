@@ -14,16 +14,16 @@ voiceAgent:
   # Tavus renders the avatar from the agent audio; keys TAVUS_API_KEY and TAVUS_FACE_ID
   # live in the assistant-integrations secret (oc set data), never in this file.
   avatarProvider: tavus
-  image: ghcr.io/heiba/assistant-voice-agent:sha-a276911
+  image: ghcr.io/heiba/assistant-voice-agent:sha-0d7ce66
 frontend:
   enabled: true
-  image: ghcr.io/heiba/assistant-frontend:sha-a276911
+  image: ghcr.io/heiba/assistant-frontend:sha-0d7ce66
 ragApi:
   enabled: true
-  image: ghcr.io/heiba/assistant-rag-api:sha-a276911
+  image: ghcr.io/heiba/assistant-rag-api:sha-0d7ce66
 ingestion:
   enabled: true
-  image: ghcr.io/heiba/assistant-ingestion:sha-a276911
+  image: ghcr.io/heiba/assistant-ingestion:sha-0d7ce66
 
 models:
   tts:

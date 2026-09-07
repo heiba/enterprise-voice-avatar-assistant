@@ -151,11 +151,15 @@ models:
 
   llm:
     deploy: true
-    name: llama-3-1-8b-instruct-fp8
-    displayName: Llama 3.1 8B Instruct (FP8)
+    name: llama-3-1-8b-instruct
+    displayName: Llama 3.1 8B Instruct (W4A16)
     servedModelName: llama-3.1-8b-instruct
-    # FP8 weights (about 9 GiB) fit a 24 GiB GPU with room for context.
-    storageUri: hf://RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8
+    # Red Hat AI validated modelcar, about 6 GiB of weights. Pulled with the
+    # cluster's registry.redhat.io pull secret (present on every OpenShift install).
+    # Alternative without that registry: hf://RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8
+    storageUri: oci://registry.redhat.io/rhelai1/modelcar-llama-3-1-8b-instruct-quantized-w4a16:1.5
+    # Without a limit vLLM reserves KV cache for the full 128k window, which does
+    # not fit next to the weights on a 24 GiB GPU and the engine fails to start.
     args:
       - --max-model-len=16384
       - --gpu-memory-utilization=0.90

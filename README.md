@@ -204,7 +204,7 @@ NAMESPACE=${PROJECT} scripts/create-secrets.sh
 
 **Option A: deploy the models with the chart (default)**
 
-The chart creates InferenceServices on OpenShift AI for the LLM (Llama 3.1 8B Instruct FP8), Whisper, and the embeddings model, plus a CPU text-to-speech service. This needs three GPUs; see [Minimum hardware requirements](#minimum-hardware-requirements).
+The chart creates InferenceServices on OpenShift AI for the LLM (Llama 3.1 8B Instruct, W4A16), Whisper, and the embeddings model, plus a CPU text-to-speech service. This needs three GPUs; see [Minimum hardware requirements](#minimum-hardware-requirements).
 
 ```bash
 helm install assistant chart --namespace ${PROJECT} \

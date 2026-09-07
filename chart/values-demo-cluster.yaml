@@ -14,13 +14,8 @@ voiceAgent:
   enabled: false
 
 models:
-  # Reuse the models already served by OpenShift AI on this cluster instead of
-  # deploying second copies: Llama 3.1 8B Instruct (W4A16) in `my-first-model`
-  # and Whisper in `whisper`. Set deploy: true again to run our own.
-  llm:
-    deploy: false
-    endpoint: http://redhataimeta-llama-31-8b-instr-kserve-workload-svc.my-first-model.svc.cluster.local:8000/v1
-    servedModelName: redhataimeta-llama-31-8b-instr
+  # The LLM, embeddings, and guardrails come from this chart. Whisper reuses the
+  # model already served by OpenShift AI in the `whisper` namespace.
   stt:
     deploy: false
     endpoint: http://redhataiwhisper-large-v3-turbo-kserve-workload-svc.whisper.svc.cluster.local:8000/v1

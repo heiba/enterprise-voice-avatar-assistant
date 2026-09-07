@@ -314,6 +314,9 @@ voiceAgent:
   replicas: 1
   # none | simli | tavus | hedra (see services/voice-agent/app/avatars.py)
   avatarProvider: none
+  # Extra environment for the worker; explicit entries win over the config map and secrets,
+  # so non-secret provider settings such as TAVUS_FACE_ID can be pinned here.
+  extraEnv: {}
   resources:
     requests:
       cpu: 500m

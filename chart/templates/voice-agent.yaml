@@ -34,6 +34,10 @@ spec:
                 name: {{ .Values.secrets.integrations }}
                 optional: true
           env:
+            {{- range $k, $v := .Values.voiceAgent.extraEnv }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
             - name: HOME
               value: /tmp
             - name: AGENT_PORT

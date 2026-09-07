@@ -14,6 +14,9 @@ voiceAgent:
   # Tavus renders the avatar from the agent audio; keys TAVUS_API_KEY and TAVUS_FACE_ID
   # live in the assistant-integrations secret (oc set data), never in this file.
   avatarProvider: tavus
+  extraEnv:
+    # Tavus stock face "Jackie - Office"; overrides the value in the assistant-integrations secret.
+    TAVUS_FACE_ID: r67d1c9cac37
   image: ghcr.io/heiba/assistant-voice-agent:sha-5dc78af
 frontend:
   enabled: true
@@ -27,8 +30,8 @@ ingestion:
 
 models:
   tts:
-    # Male Kokoro voice to match the Tavus stock face (am_* US, bm_* UK are male voices).
-    voice: am_michael
+    # Bright female Kokoro voice to match the Tavus stock face (af_bella, grade A-; af_heart is warmer).
+    voice: af_bella
   # The LLM, embeddings, and guardrails come from this chart. Whisper reuses the
   # model already served by OpenShift AI in the `whisper` namespace.
   stt:

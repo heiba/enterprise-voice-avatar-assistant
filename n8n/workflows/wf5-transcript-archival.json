@@ -142,7 +142,7 @@
       "type": "n8n-nodes-base.convertToFile",
       "typeVersion": 1.1,
       "position": [
-        1560,
+        1780,
         0
       ]
     },
@@ -172,7 +172,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1820,
+        2040,
         0
       ],
       "retryOnFail": true,
@@ -190,17 +190,30 @@
           "value": "#assistant-ingestion"
         },
         "otherOptions": {},
-        "text": "=:memo: Transcript of session {{ $('Prepare document').first().json.session_id.slice(0, 8) }} archived{{ $('Prepare document').first().json.google_folder ? ' to Google Docs' : '' }} and queued for re-ingestion (job {{ $json.job_id }})."
+        "text": "=:memo: Transcript of session {{ $('Restore transcript').first().json.session_id.slice(0, 8) }} archived{{ $('Restore transcript').first().json.doc_url ? ' to <' + $('Restore transcript').first().json.doc_url + '|Google Docs>' : '' }} and queued for re-ingestion (job {{ $json.job_id }})."
       },
       "id": "b35c1fcd-6ee0-5963-ab17-643447bd2f36",
       "name": "Notify archival",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.3,
       "position": [
-        2080,
+        2300,
         0
       ],
       "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Both branches land here: after the Google Docs write (whose output is the Docs API\n// response) or straight from the If node when no folder is configured. Restore the\n// prepared transcript and keep the Google Doc link when one was created.\nconst base = $('Prepare document').first().json;\nconst docId = $json.documentId || (($json.mimeType || '').includes('document') ? $json.id : '') || '';\nreturn [{ json: { ...base, doc_url: docId ? `https://docs.google.com/document/d/${docId}/edit` : '' } }];"
+      },
+      "id": "3f6c2b1e-7d4a-5c9e-8a21-6b0e9d4c5f10",
+      "name": "Restore transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        0
+      ]
     }
   ],
   "connections": {
@@ -248,7 +261,7 @@
         ],
         [
           {
-            "node": "Transcript to file",
+            "node": "Restore transcript",
             "type": "main",
             "index": 0
           }
@@ -270,7 +283,7 @@
       "main": [
         [
           {
-            "node": "Transcript to file",
+            "node": "Restore transcript",
             "type": "main",
             "index": 0
           }
@@ -293,6 +306,17 @@
         [
           {
             "node": "Notify archival",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore transcript": {
+      "main": [
+        [
+          {
+            "node": "Transcript to file",
             "type": "main",
             "index": 0
           }

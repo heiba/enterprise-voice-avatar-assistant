@@ -110,7 +110,20 @@ async def entrypoint(ctx: JobContext) -> None:
         allow_interruptions=True,
         min_endpointing_delay=settings.min_endpointing_delay,
     )
-    avatar = await avatars.start(session, ctx.room)
+    try:
+        avatar = await asyncio.wait_for(
+            avatars.start(session, ctx.room), timeout=settings.avatar_start_timeout_seconds
+        )
+    except TimeoutError:
+        log.error(
+            "avatar provider %s did not start within %.0fs; continuing audio-only",
+            avatars.provider(),
+            settings.avatar_start_timeout_seconds,
+        )
+        avatar = None
+    except Exception:
+        log.exception("avatar provider %s failed to start; continuing audio-only", avatars.provider())
+        avatar = None
 
     async def stop_avatar() -> None:
         await avatars.stop(avatar)

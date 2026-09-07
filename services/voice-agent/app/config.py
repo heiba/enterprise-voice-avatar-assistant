@@ -45,6 +45,8 @@ class Settings(BaseSettings):
 
     # Avatar: none | simli | tavus | hedra
     avatar_provider: str = "none"
+    # Give up on the avatar and answer audio-only if the provider has not joined within this time
+    avatar_start_timeout_seconds: float = 25.0
     simli_api_key: str | None = None
     simli_face_id: str | None = None
     tavus_api_key: str | None = None

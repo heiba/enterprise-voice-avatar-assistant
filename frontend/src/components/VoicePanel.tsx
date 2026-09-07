@@ -110,6 +110,19 @@ function VoiceStage({ onAssistantTurn, error }: { onAssistantTurn: (turn: Assist
   const label =
     connectionState !== ConnectionState.Connected ? `Room: ${connectionState}` : (STATE_LABEL[state] ?? state);
 
+  // LiveKit dispatches the agent once, when the room is created. If no worker was available at that
+  // instant (for example during a rollout) the room never gets one, so tell the person what to do.
+  const [stalled, setStalled] = useState(false);
+  useEffect(() => {
+    const waiting = connectionState === ConnectionState.Connected && (state === "connecting" || state === "initializing");
+    if (!waiting) {
+      setStalled(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setStalled(true), 20000);
+    return () => window.clearTimeout(timer);
+  }, [connectionState, state]);
+
   return (
     <div className="voice-stage">
       <div className="avatar-frame">
@@ -128,6 +141,9 @@ function VoiceStage({ onAssistantTurn, error }: { onAssistantTurn: (turn: Assist
           End voice
         </button>
         {error && <span className="voice-error">{error}</span>}
+        {stalled && !error && (
+          <span className="voice-error">The assistant has not joined this room. Click End voice, then start again.</span>
+        )}
       </div>
       <p className="ai-label">Spoken answers are AI-generated from company documents; the sources appear on the right.</p>
     </div>

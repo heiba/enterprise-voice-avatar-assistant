@@ -64,3 +64,12 @@ curl -s -X POST $N8N/webhook/archive-transcript -H 'Content-Type: application/js
 ```
 
 Executions and their inputs and outputs are visible under *Executions* in n8n.
+
+## Hardening notes
+
+- **Slack request signatures are not verified.** WF4 receives button clicks on
+  a plain Webhook node (`/webhook/slack-interactions`), which does not check
+  the `X-Slack-Signature` header, so the *Signature Secret* field of the Slack
+  credential has no effect. For anything beyond a demo, either replace the
+  Webhook node with a Slack Trigger node (which verifies signatures using that
+  field) or verify the HMAC in a Code node before acting on the payload.

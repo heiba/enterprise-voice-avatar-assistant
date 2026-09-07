@@ -43,6 +43,15 @@ def cited_numbers(answer: str, max_n: int) -> set[int]:
     return {int(m) for m in MARKER_RE.findall(answer or "") if 1 <= int(m) <= max_n}
 
 
+def retrieval_query(message: str, history: list[dict[str, str]]) -> str:
+    """Short follow-ups carry little meaning alone; prepend the previous user question for retrieval only."""
+    if len(message.split()) <= settings.followup_max_words:
+        previous = [m["content"] for m in history if m.get("role") == "user"]
+        if previous:
+            return f"{previous[-1]} {message}"
+    return message
+
+
 def answer(request: ChatRequest) -> ChatResponse:
     session_id = request.session_id or uuid.uuid4().hex
     memory.ensure_conversation(session_id, request.user_id, request.mode)
@@ -56,8 +65,8 @@ def answer(request: ChatRequest) -> ChatResponse:
         return ChatResponse(session_id=session_id, answer=settings.blocked_message, citations=[], blocked=True,
                             guardrail=info, model=settings.llm_model)
 
-    hits = retrieval.search(request.message, top_k=request.top_k)
     history = memory.history(session_id, settings.history_turns * 2)
+    hits = retrieval.search(retrieval_query(request.message, history), top_k=request.top_k)
     user_memory = memory.get_user_memory(request.user_id) if request.user_id else {}
     messages = build_messages(request.message, hits, history, request.mode, user_memory)
 

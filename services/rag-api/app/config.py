@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     rag_min_score: float = 0.3
     max_context_chars: int = 12000
     history_turns: int = 8
+    # Follow-ups with at most this many words are retrieved together with the previous question
+    followup_max_words: int = 6
     snippet_chars: int = 300
 
     # Memory, tickets, documents

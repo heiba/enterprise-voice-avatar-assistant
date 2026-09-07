@@ -26,3 +26,11 @@ def test_messages_include_history_and_voice_style():
 
 def test_citation_markers_are_extracted_within_range():
     assert rag.cited_numbers("Every 90 days [2]. Also [1][7].", max_n=2) == {1, 2}
+
+
+def test_retrieval_query_expands_short_followups():
+    history = [{"role": "user", "content": "How often must admin passwords be rotated?"}, {"role": "assistant", "content": "90 days"}]
+    assert rag.retrieval_query("And for service accounts?", history) == "How often must admin passwords be rotated? And for service accounts?"
+    assert rag.retrieval_query("And for service accounts?", []) == "And for service accounts?"
+    long = "What is the exact procedure for resetting a forgotten password when the portal is down?"
+    assert rag.retrieval_query(long, history) == long

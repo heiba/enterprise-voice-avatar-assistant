@@ -61,6 +61,10 @@ spec:
     automountServiceAccountToken: false
     minReplicas: 1
     maxReplicas: 1
+    # GPU-bound single replica: a rolling update would need a second GPU while
+    # the old pod still holds the first. Recreate stops the old pod first.
+    deploymentStrategy:
+      type: Recreate
     model:
       modelFormat:
         name: vLLM

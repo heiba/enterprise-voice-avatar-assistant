@@ -53,8 +53,8 @@ if [ "${gpus}" -gt 0 ]; then
 else
   warn "no allocatable GPUs; set models.<name>.deploy=false and use external endpoints"
 fi
-if oc get csv -A 2>/dev/null | grep -q 'Node Feature Discovery'; then pass "Node Feature Discovery operator"; else warn "Node Feature Discovery operator not found (needed for GPU nodes)"; fi
-if oc get csv -A 2>/dev/null | grep -q 'NVIDIA GPU Operator'; then pass "NVIDIA GPU Operator"; else warn "NVIDIA GPU Operator not found (needed for GPU nodes)"; fi
+if oc get csv -A 2>/dev/null | grep 'Node Feature Discovery' >/dev/null; then pass "Node Feature Discovery operator"; else warn "Node Feature Discovery operator not found (needed for GPU nodes)"; fi
+if oc get csv -A 2>/dev/null | grep 'NVIDIA GPU Operator' >/dev/null; then pass "NVIDIA GPU Operator"; else warn "NVIDIA GPU Operator not found (needed for GPU nodes)"; fi
 
 echo "Storage and ingress"
 sc=$(oc get storageclass -o jsonpath='{range .items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")]}{.metadata.name}{end}' 2>/dev/null || true)

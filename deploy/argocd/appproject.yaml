@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: voice-avatar-assistant
+  namespace: openshift-gitops
+spec:
+  description: Enterprise voice and avatar assistant quickstart
+  sourceRepos:
+    - https://github.com/heiba/enterprise-voice-avatar-assistant.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: voice-avatar-assistant
+  # The chart is namespace-scoped; no cluster resources are needed.
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

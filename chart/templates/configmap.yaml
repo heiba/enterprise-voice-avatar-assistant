@@ -1,0 +1,36 @@
+{{- $livekitHost := include "assistant.publicHost" (dict "root" . "name" "livekit" "override" .Values.livekit.publicHost) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: assistant-config
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "config") | nindent 4 }}
+data:
+  # Model endpoints (OpenAI-compatible, base URL includes /v1)
+  LLM_BASE_URL: {{ include "assistant.modelEndpoint" (dict "root" . "key" "llm") | quote }}
+  LLM_MODEL: {{ .Values.models.llm.servedModelName | quote }}
+  STT_BASE_URL: {{ include "assistant.modelEndpoint" (dict "root" . "key" "stt") | quote }}
+  STT_MODEL: {{ .Values.models.stt.servedModelName | quote }}
+  TTS_BASE_URL: {{ include "assistant.modelEndpoint" (dict "root" . "key" "tts") | quote }}
+  TTS_MODEL: {{ .Values.models.tts.servedModelName | quote }}
+  TTS_VOICE: {{ .Values.models.tts.voice | quote }}
+  EMBEDDINGS_BASE_URL: {{ include "assistant.modelEndpoint" (dict "root" . "key" "embeddings") | quote }}
+  EMBEDDINGS_MODEL: {{ .Values.models.embeddings.servedModelName | quote }}
+  GUARDRAILS_PROVIDER: {{ .Values.models.guardrails.provider | quote }}
+  GUARDRAILS_BASE_URL: {{ include "assistant.modelEndpoint" (dict "root" . "key" "guardrails") | quote }}
+  GUARDRAILS_MODEL: {{ .Values.models.guardrails.servedModelName | quote }}
+  # Datastores
+  QDRANT_URL: "http://qdrant:6333"
+  QDRANT_COLLECTION: {{ .Values.qdrant.collection | quote }}
+  S3_ENDPOINT_URL: "http://minio:9000"
+  S3_BUCKET: {{ index .Values.minio.buckets 0 | quote }}
+  S3_INBOX_BUCKET: "inbox"
+  S3_TRANSCRIPTS_BUCKET: "transcripts"
+  # Services
+  RAG_API_URL: "http://rag-api:8080"
+  INGESTION_URL: "http://ingestion:8080"
+  N8N_URL: "http://n8n:5678"
+  LIVEKIT_URL: "ws://livekit:7880"
+  LIVEKIT_PUBLIC_URL: {{ if $livekitHost }}{{ printf "wss://%s" $livekitHost | quote }}{{ else }}""{{ end }}
+  RAG_TOP_K: {{ .Values.ragApi.topK | quote }}
+  AVATAR_PROVIDER: {{ .Values.voiceAgent.avatarProvider | quote }}

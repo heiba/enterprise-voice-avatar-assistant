@@ -1,0 +1,173 @@
+{{- if .Values.n8n.enabled }}
+{{- $host := include "assistant.publicHost" (dict "root" . "name" "n8n" "override" .Values.n8n.publicHost) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: n8n-data
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "n8n") | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with .Values.global.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.n8n.storage }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "n8n") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "assistant.selector" (dict "root" . "name" "n8n") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "assistant.componentLabels" (dict "root" . "name" "n8n") | nindent 8 }}
+    spec:
+      containers:
+        - name: n8n
+          image: {{ .Values.n8n.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            # Runs under an OpenShift-assigned UID: keep all writable state on the volume.
+            - name: N8N_USER_FOLDER
+              value: /data
+            - name: HOME
+              value: /data
+            - name: N8N_PORT
+              value: "5678"
+            - name: N8N_PROTOCOL
+              value: https
+            {{- if $host }}
+            - name: N8N_HOST
+              value: {{ $host | quote }}
+            - name: WEBHOOK_URL
+              value: https://{{ $host }}/
+            - name: N8N_EDITOR_BASE_URL
+              value: https://{{ $host }}/
+            {{- end }}
+            - name: N8N_PROXY_HOPS
+              value: "1"
+            - name: N8N_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.n8n }}
+                  key: N8N_ENCRYPTION_KEY
+            - name: DB_TYPE
+              value: postgresdb
+            - name: DB_POSTGRESDB_HOST
+              value: postgres
+            - name: DB_POSTGRESDB_PORT
+              value: "5432"
+            - name: DB_POSTGRESDB_SCHEMA
+              value: n8n
+            - name: DB_POSTGRESDB_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.postgres }}
+                  key: POSTGRESQL_DATABASE
+            - name: DB_POSTGRESDB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.postgres }}
+                  key: POSTGRESQL_USER
+            - name: DB_POSTGRESDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.postgres }}
+                  key: POSTGRESQL_PASSWORD
+            - name: N8N_RUNNERS_ENABLED
+              value: "true"
+            - name: N8N_BLOCK_ENV_ACCESS_IN_NODE
+              value: "false"
+            - name: N8N_DIAGNOSTICS_ENABLED
+              value: "false"
+            - name: GENERIC_TIMEZONE
+              value: {{ .Values.n8n.timezone | quote }}
+            # Service URLs the exported workflows read through $env
+            - name: RAG_API_URL
+              value: http://rag-api:8080
+            - name: INGESTION_URL
+              value: http://ingestion:8080
+            - name: S3_ENDPOINT_URL
+              value: http://minio:9000
+            {{- range $k, $v := .Values.n8n.extraEnv }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 5678
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.n8n.resources | nindent 12 }}
+          securityContext:
+            {{- include "assistant.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: n8n-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "n8n") | nindent 4 }}
+spec:
+  selector:
+    {{- include "assistant.selector" (dict "root" . "name" "n8n") | nindent 4 }}
+  ports:
+    - name: http
+      port: 5678
+      targetPort: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: n8n
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "n8n") | nindent 4 }}
+  annotations:
+    haproxy.router.openshift.io/timeout: 120s
+spec:
+  {{- if $host }}
+  host: {{ $host }}
+  {{- end }}
+  to:
+    kind: Service
+    name: n8n
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}

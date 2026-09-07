@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: voice-avatar-assistant
+  namespace: openshift-gitops
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: voice-avatar-assistant
+  source:
+    repoURL: https://github.com/heiba/enterprise-voice-avatar-assistant.git
+    targetRevision: main
+    path: chart
+    helm:
+      releaseName: assistant
+      valueFiles:
+        - values.yaml
+        - values-demo-cluster.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: voice-avatar-assistant
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ApplyOutOfSyncOnly=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 20s
+        factor: 2
+        maxDuration: 5m

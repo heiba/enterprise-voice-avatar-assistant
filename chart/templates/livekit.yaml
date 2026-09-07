@@ -1,0 +1,174 @@
+{{- if .Values.livekit.enabled }}
+{{- $host := include "assistant.publicHost" (dict "root" . "name" "livekit" "override" .Values.livekit.publicHost) }}
+{{- $turnHost := include "assistant.publicHost" (dict "root" . "name" "livekit-turn" "override" .Values.livekit.turn.publicHost) }}
+{{- $turn := and .Values.livekit.turn.enabled .Values.livekit.turn.tlsSecret $turnHost }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: livekit-config
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "livekit") | nindent 4 }}
+data:
+  config.yaml: |
+    port: 7880
+    log_level: info
+    rtc:
+      tcp_port: 7881
+      udp_port: 7882
+      use_external_ip: false
+    {{- if $turn }}
+    turn:
+      enabled: true
+      domain: {{ $turnHost }}
+      tls_port: 5349
+      cert_file: /etc/livekit/tls/tls.crt
+      key_file: /etc/livekit/tls/tls.key
+    {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: livekit
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "livekit") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "assistant.selector" (dict "root" . "name" "livekit") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "assistant.componentLabels" (dict "root" . "name" "livekit") | nindent 8 }}
+      annotations:
+        checksum/config: {{ toYaml .Values.livekit | sha256sum | trunc 16 }}
+    spec:
+      containers:
+        - name: livekit
+          image: {{ .Values.livekit.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - --config
+            - /etc/livekit/config.yaml
+          env:
+            - name: LIVEKIT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.livekit }}
+                  key: LIVEKIT_API_KEY
+            - name: LIVEKIT_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.livekit }}
+                  key: LIVEKIT_API_SECRET
+            - name: LIVEKIT_KEYS
+              value: "$(LIVEKIT_API_KEY): $(LIVEKIT_API_SECRET)"
+          ports:
+            - name: http
+              containerPort: 7880
+              protocol: TCP
+            - name: rtc-tcp
+              containerPort: 7881
+              protocol: TCP
+            - name: rtc-udp
+              containerPort: 7882
+              protocol: UDP
+            {{- if $turn }}
+            - name: turn-tls
+              containerPort: 5349
+              protocol: TCP
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.livekit.resources | nindent 12 }}
+          securityContext:
+            {{- include "assistant.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/livekit
+              readOnly: true
+            {{- if $turn }}
+            - name: tls
+              mountPath: /etc/livekit/tls
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: livekit-config
+        {{- if $turn }}
+        - name: tls
+          secret:
+            secretName: {{ .Values.livekit.turn.tlsSecret }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: livekit
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "livekit") | nindent 4 }}
+spec:
+  selector:
+    {{- include "assistant.selector" (dict "root" . "name" "livekit") | nindent 4 }}
+  ports:
+    - name: http
+      port: 7880
+      targetPort: http
+    - name: rtc-tcp
+      port: 7881
+      targetPort: rtc-tcp
+    - name: rtc-udp
+      port: 7882
+      targetPort: rtc-udp
+      protocol: UDP
+    {{- if $turn }}
+    - name: turn-tls
+      port: 5349
+      targetPort: turn-tls
+    {{- end }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: livekit
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "livekit") | nindent 4 }}
+  annotations:
+    haproxy.router.openshift.io/timeout: 1h
+spec:
+  {{- if $host }}
+  host: {{ $host }}
+  {{- end }}
+  to:
+    kind: Service
+    name: livekit
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- if $turn }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: livekit-turn
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "livekit") | nindent 4 }}
+spec:
+  host: {{ $turnHost }}
+  to:
+    kind: Service
+    name: livekit
+  port:
+    targetPort: turn-tls
+  tls:
+    termination: passthrough
+{{- end }}
+{{- end }}

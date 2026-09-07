@@ -1,52 +1,63 @@
-# This pod verifies that the configured model endpoint is reachable.
-# It runs as a Helm test (helm test <release>) AND can be used standalone
-# before deploying the full chart.
-#
-# Standalone usage (before helm install):
-#   oc run test-model-access --rm -it --restart=Never \
-#     --image=registry.access.redhat.com/ubi9/ubi-minimal:latest \
-#     -- /bin/sh -c 'curl -sf --max-time 10 \
-#       -H "Authorization: Bearer YOUR_API_KEY" \
-#       -H "Content-Type: application/json" \
-#       -d "{\"model\": \"YOUR_MODEL_NAME\", \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in one word.\"}], \"max_tokens\": 10}" \
-#       "YOUR_MODEL_ENDPOINT/v1/chat/completions" && echo "" && echo "SUCCESS" || echo "FAILED"'
-#
-{{- if .Values.model }}
-{{- if and .Values.model.name .Values.model.endpoint }}
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ .Release.Name }}-test-model-access"
+  name: {{ .Release.Name }}-test-services
   labels:
-    app.kubernetes.io/name: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    {{- include "assistant.componentLabels" (dict "root" . "name" "test") | nindent 4 }}
   annotations:
-    "helm.sh/hook": test
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
   restartPolicy: Never
   containers:
-    - name: test-model
+    - name: test
       image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      securityContext:
+        {{- include "assistant.securityContext" . | nindent 8 }}
+      env:
+        - name: LLM_BASE_URL
+          value: {{ include "assistant.modelEndpoint" (dict "root" . "key" "llm") | quote }}
+        - name: LLM_MODEL
+          value: {{ .Values.models.llm.servedModelName | quote }}
+        - name: LLM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.models }}
+              key: LLM_API_KEY
       command:
         - /bin/sh
         - -c
         - |
-          echo "Testing model endpoint connectivity..."
-          echo "Model: {{ .Values.model.name }}"
-          echo "Endpoint: {{ .Values.model.endpoint }}"
-
-          curl -sf --max-time 10 \
-            -H "Authorization: Bearer {{ .Values.model.api_key }}" \
-            -H "Content-Type: application/json" \
-            -d '{"model": "{{ .Values.model.name }}", "messages": [{"role": "user", "content": "Say hello in one word."}], "max_tokens": 10}' \
-            "{{ .Values.model.endpoint }}/v1/chat/completions"
-
-          if [ $? -eq 0 ]; then
-            echo ""
-            echo "SUCCESS: Model endpoint is reachable and responding."
-          else
-            echo "FAILED: Could not reach model endpoint."
-            exit 1
+          set -u
+          failed=0
+          check() {
+            name="$1"; url="$2"
+            if curl -sf --max-time 10 "$url" >/dev/null; then echo "OK      $name"; else echo "FAILED  $name ($url)"; failed=1; fi
+          }
+          {{- if .Values.qdrant.enabled }}
+          check qdrant http://qdrant:6333/readyz
+          {{- end }}
+          {{- if .Values.minio.enabled }}
+          check minio http://minio:9000/minio/health/live
+          {{- end }}
+          {{- if .Values.n8n.enabled }}
+          check n8n http://n8n:5678/healthz
+          {{- end }}
+          {{- if .Values.livekit.enabled }}
+          check livekit http://livekit:7880/
+          {{- end }}
+          {{- if .Values.ragApi.enabled }}
+          check rag-api http://rag-api:8080/healthz
+          {{- end }}
+          {{- if .Values.ingestion.enabled }}
+          check ingestion http://ingestion:8080/healthz
+          {{- end }}
+          {{- if .Values.models.tts.deploy }}
+          check tts http://tts:8880/v1/models
+          {{- end }}
+          if [ -n "$LLM_BASE_URL" ]; then
+            if curl -sf --max-time 60 -H "Authorization: Bearer $LLM_API_KEY" -H "Content-Type: application/json" \
+              -d "{\"model\": \"$LLM_MODEL\", \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in one word.\"}], \"max_tokens\": 10}" \
+              "$LLM_BASE_URL/chat/completions" >/dev/null; then echo "OK      llm chat completion"; else echo "FAILED  llm chat completion ($LLM_BASE_URL)"; failed=1; fi
           fi
-{{- end }}
-{{- end }}
+          exit $failed

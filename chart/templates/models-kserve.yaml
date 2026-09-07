@@ -1,0 +1,75 @@
+{{- /*
+One vLLM ServingRuntime plus InferenceService per model with deploy=true.
+Shape follows what the OpenShift AI 3.5 dashboard creates (Standard deployment
+mode, modelcar or Hugging Face storageUri, port 8080).
+*/ -}}
+{{- range $key := list "llm" "stt" "embeddings" "guardrails" }}
+{{- $m := index $.Values.models $key }}
+{{- if $m.deploy }}
+---
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: {{ $m.name }}
+  labels:
+    opendatahub.io/dashboard: "true"
+    {{- include "assistant.componentLabels" (dict "root" $ "name" (printf "model-%s" $key)) | nindent 4 }}
+  annotations:
+    opendatahub.io/apiProtocol: REST
+    opendatahub.io/recommended-accelerators: '["nvidia.com/gpu"]'
+    openshift.io/display-name: vLLM runtime for {{ $m.displayName }}
+spec:
+  annotations:
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8080"
+  containers:
+    - name: kserve-container
+      image: {{ default $.Values.models.runtimeImage $m.runtimeImage }}
+      command:
+        - python
+        - -m
+        - vllm.entrypoints.openai.api_server
+      args:
+        - --port=8080
+        - --model=/mnt/models
+        - --served-model-name={{ $m.servedModelName }}
+      env:
+        - name: HF_HOME
+          value: /tmp/hf_home
+      ports:
+        - containerPort: 8080
+          protocol: TCP
+  multiModel: false
+  supportedModelFormats:
+    - name: vLLM
+      autoSelect: true
+---
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: {{ $m.name }}
+  labels:
+    opendatahub.io/dashboard: "true"
+    {{- include "assistant.componentLabels" (dict "root" $ "name" (printf "model-%s" $key)) | nindent 4 }}
+  annotations:
+    openshift.io/display-name: {{ $m.displayName }}
+    serving.kserve.io/deploymentMode: Standard
+    security.opendatahub.io/enable-auth: "false"
+spec:
+  predictor:
+    automountServiceAccountToken: false
+    minReplicas: 1
+    maxReplicas: 1
+    model:
+      modelFormat:
+        name: vLLM
+      runtime: {{ $m.name }}
+      storageUri: {{ $m.storageUri | quote }}
+      {{- with $m.args }}
+      args:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      resources:
+        {{- toYaml $m.resources | nindent 8 }}
+{{- end }}
+{{- end }}

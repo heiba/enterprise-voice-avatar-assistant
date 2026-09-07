@@ -1,0 +1,32 @@
+# Overrides for the team demo cluster (Red Hat demo platform, 1 node, 4x NVIDIA L4).
+# Used by deploy/argocd/application.yaml together with values.yaml.
+global:
+  domain: apps.ocp.6s896.sandbox2112.opentlc.com
+
+# Application images are not published yet; enable once CI pushes them.
+frontend:
+  enabled: false
+ragApi:
+  enabled: false
+ingestion:
+  enabled: false
+voiceAgent:
+  enabled: false
+
+models:
+  # Reuse the Whisper model already served by OpenShift AI in the `whisper`
+  # namespace instead of deploying a second copy.
+  stt:
+    deploy: false
+    endpoint: http://redhataiwhisper-large-v3-turbo-kserve-workload-svc.whisper.svc.cluster.local:8000/v1
+    servedModelName: redhataiwhisper-large-v3-turbo
+  guardrails:
+    provider: granite-guardian
+    deploy: true
+
+livekit:
+  turn:
+    # Enable after copying the cluster wildcard certificate into the namespace
+    # as a kubernetes.io/tls secret named livekit-turn-tls.
+    enabled: false
+    tlsSecret: livekit-turn-tls

@@ -24,7 +24,7 @@ dist/
 *.tsbuildinfo
 
 # Helm
-deploy/helm/charts/
+chart/charts/
 *.tgz
 
 # Terraform

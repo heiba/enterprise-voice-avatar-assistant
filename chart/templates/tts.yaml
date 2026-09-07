@@ -1,0 +1,62 @@
+{{- if .Values.models.tts.deploy }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tts
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "tts") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "assistant.selector" (dict "root" . "name" "tts") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "assistant.componentLabels" (dict "root" . "name" "tts") | nindent 8 }}
+    spec:
+      containers:
+        - name: tts
+          image: {{ .Values.models.tts.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: http
+              containerPort: 8880
+              protocol: TCP
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.models.tts.resources | nindent 12 }}
+          securityContext:
+            {{- include "assistant.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tts
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "tts") | nindent 4 }}
+spec:
+  selector:
+    {{- include "assistant.selector" (dict "root" . "name" "tts") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8880
+      targetPort: http
+{{- end }}

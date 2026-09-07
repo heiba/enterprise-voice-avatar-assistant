@@ -1,0 +1,30 @@
+# Minimal ClusterPolicy. The operator fills in defaults for every omitted
+# section. For the full reference run:
+#   oc get csv -n nvidia-gpu-operator -o jsonpath='{.items[?(@.spec.displayName=="NVIDIA GPU Operator")].metadata.annotations.alm-examples}'
+apiVersion: nvidia.com/v1
+kind: ClusterPolicy
+metadata:
+  name: gpu-cluster-policy
+spec:
+  operator:
+    defaultRuntime: crio
+    use_ocp_driver_toolkit: true
+  driver:
+    enabled: true
+  toolkit:
+    enabled: true
+  devicePlugin:
+    enabled: true
+  dcgmExporter:
+    enabled: true
+  gfd:
+    enabled: true
+  nodeStatusExporter:
+    enabled: true
+  migManager:
+    enabled: false
+  validator:
+    plugin:
+      env:
+        - name: WITH_WORKLOAD
+          value: "false"

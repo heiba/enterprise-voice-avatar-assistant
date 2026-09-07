@@ -133,18 +133,18 @@ Models served on OpenShift AI, only if you deploy them with the chart instead of
 | Speech-to-text | Whisper large-v3-turbo on vLLM | 1 NVIDIA GPU with 16 GiB or more, or shared with the LLM | 2 vCPU / 8 GiB |
 | Text-to-speech | Kokoro or Orpheus | Optional. CPU is sufficient for demo load | 2 vCPU / 4 GiB |
 | Embeddings | BGE-M3 or nomic-embed on vLLM | Optional. CPU is sufficient for demo load | 2 vCPU / 8 GiB |
-| Guardrails | Llama Guard 3 8B on vLLM | 1 NVIDIA GPU with 16 GiB or more | 4 vCPU / 16 GiB |
+| Guardrails | Granite Guardian 3.3 8B on vLLM | 1 NVIDIA GPU with 24 GiB or more | 4 vCPU / 16 GiB |
 
 > **Note:** If all models come from Models-as-a-Service (MaaS) endpoints, no GPU is required in the cluster.
 
 ### Minimum software requirements
 
 - Red Hat OpenShift 4.16 or later
-- Red Hat OpenShift AI 2.16 or later with KServe single-model serving and the vLLM ServingRuntime enabled
+- Red Hat OpenShift AI 3.5 or later with KServe in standard deployment mode and the vLLM ServingRuntime enabled
 - NVIDIA GPU Operator and Node Feature Discovery Operator, only if deploying GPU models with the chart
 - A default StorageClass that supports ReadWriteOnce volumes
 - Client tools: `oc` 4.16 or later and `helm` 3.14 or later
-- Optional: Terraform 1.6 or later for the automated install path
+- Optional: the OpenShift GitOps operator (Argo CD) for the GitOps deployment path
 - Optional external services: a Slack workspace with a bot token, a Google Cloud project with the Docs and Drive APIs enabled, an avatar provider account (Simli, HeyGen, or Tavus), and ElevenLabs
 
 Tested version combinations will be recorded here once validation runs complete.
@@ -160,7 +160,9 @@ This quickstart deploys as a regular OpenShift user with:
 No cluster admin access is required. Two caveats:
 
 - PostgreSQL, Qdrant, MinIO, and n8n are deployed by the chart itself rather than by cluster-wide operators, so no operator installation is needed.
-- The LiveKit server must expose WebRTC media to browsers. The default configuration uses TCP through a Route. Exposing UDP for better audio quality requires a LoadBalancer Service, which some clusters restrict to admins.
+- The LiveKit server must expose WebRTC media to browsers. On OpenShift this is done with LiveKit's built-in TURN server over TLS behind a passthrough Route, which needs a certificate the browser trusts. See `livekit.turn` in the values file.
+
+Cluster administrators who start from a bare cluster can install the platform prerequisites with the manifests in [deploy/bootstrap/](deploy/bootstrap/README.md).
 
 ## Deploy
 
@@ -171,6 +173,7 @@ Before deploying, ensure you have:
 - Access to an OpenShift cluster with OpenShift AI installed that meets the requirements above
 - `oc` installed and logged in (`oc whoami` returns your user)
 - `helm` installed
+- Run `scripts/check-prereqs.sh` after logging in; it reports anything missing and which permissions you lack
 - Model endpoints ready: either existing OpenAI-compatible endpoints (MaaS) with API keys, or GPU capacity to deploy models with the chart
 - Optional: a Slack bot token, a Google service account JSON key, an avatar provider API key, and an ElevenLabs API key
 
@@ -183,60 +186,68 @@ git clone https://github.com/rh-ai-quickstart/enterprise-voice-avatar-assistant.
 cd enterprise-voice-avatar-assistant
 ```
 
-2. Create a new OpenShift project:
+2. Create a new OpenShift project and note the cluster apps domain:
 
 ```bash
 PROJECT="voice-avatar-assistant"
+DOMAIN=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
 oc new-project ${PROJECT}
 ```
 
-3. Fetch the chart dependencies (Qdrant, n8n, MinIO, LiveKit):
+3. Create the secrets. The script generates passwords for PostgreSQL, MinIO, n8n, and LiveKit, and stores any API keys you export beforehand (the variable names are listed in the script header). Secrets are never stored in git.
 
 ```bash
-helm dependency update deploy/helm
+NAMESPACE=${PROJECT} scripts/create-secrets.sh
 ```
 
-4. Install the chart. Pick one of the two model options.
+4. Install the chart. `global.domain` gives Routes, n8n, and LiveKit stable public URLs. Pick one of the two model options.
 
-**Option A: bring your own model endpoints (MaaS)**
+**Option A: deploy the models with the chart (default)**
 
-Point each model at an existing OpenAI-compatible endpoint. Endpoints must include the protocol and the `/v1` path.
+The chart creates InferenceServices on OpenShift AI for the LLM (Llama 3.1 8B Instruct FP8), Whisper, and the embeddings model, plus a CPU text-to-speech service. This needs three GPUs; see [Minimum hardware requirements](#minimum-hardware-requirements).
 
 ```bash
-helm install assistant deploy/helm --namespace ${PROJECT} \
+helm install assistant chart --namespace ${PROJECT} \
+  --set global.domain=${DOMAIN}
+```
+
+**Option B: bring your own model endpoints (MaaS)**
+
+Point any model at an existing OpenAI-compatible endpoint instead. Endpoints include the protocol and the `/v1` path. API keys are read by the secrets script from `LLM_API_KEY`, `STT_API_KEY`, `EMBEDDINGS_API_KEY`, and `TTS_API_KEY`.
+
+```bash
+helm install assistant chart --namespace ${PROJECT} \
+  --set global.domain=${DOMAIN} \
+  --set models.llm.deploy=false \
   --set models.llm.endpoint=https://LLM_ENDPOINT/v1 \
-  --set models.llm.name=LLM_MODEL_NAME \
-  --set models.llm.apiKey=LLM_API_KEY \
+  --set models.llm.servedModelName=LLM_MODEL_NAME \
+  --set models.stt.deploy=false \
   --set models.stt.endpoint=https://STT_ENDPOINT/v1 \
-  --set models.stt.name=STT_MODEL_NAME \
-  --set models.stt.apiKey=STT_API_KEY \
-  --set models.tts.endpoint=https://TTS_ENDPOINT/v1 \
-  --set models.tts.name=TTS_MODEL_NAME \
-  --set models.tts.apiKey=TTS_API_KEY \
+  --set models.stt.servedModelName=STT_MODEL_NAME \
+  --set models.embeddings.deploy=false \
   --set models.embeddings.endpoint=https://EMBEDDINGS_ENDPOINT/v1 \
-  --set models.embeddings.name=EMBEDDINGS_MODEL_NAME \
-  --set models.embeddings.apiKey=EMBEDDINGS_API_KEY
+  --set models.embeddings.servedModelName=EMBEDDINGS_MODEL_NAME
 ```
 
-**Option B: deploy the models with the chart**
-
-The chart creates InferenceServices for the LLM, Whisper, TTS, and embeddings models on OpenShift AI. This requires GPUs; see [Minimum hardware requirements](#minimum-hardware-requirements).
-
-```bash
-helm install assistant deploy/helm --namespace ${PROJECT} \
-  --set models.llm.deploy=true \
-  --set models.stt.deploy=true \
-  --set models.tts.deploy=true \
-  --set models.embeddings.deploy=true
-```
-
-The two options can be mixed per model, for example a MaaS LLM with Whisper deployed locally. For longer configurations, copy `deploy/helm/values.yaml`, edit it, and pass it with `-f my-values.yaml`. Slack, Google Docs, the avatar provider, ElevenLabs, and guardrails are configured through the same values file.
+The two options mix per model, for example a MaaS LLM with Whisper deployed locally. For longer configurations copy `chart/values.yaml`, edit it, and pass it with `-f my-values.yaml`. Guardrails, the avatar provider, and the integrations are configured through the same file.
 
 5. Import the n8n workflows. Open the n8n Route, sign in, import each JSON file from `n8n/workflows/`, and attach your Slack and Google credentials to the corresponding nodes.
 
 ```bash
 echo https://$(oc get route/n8n -n ${PROJECT} --template='{{.spec.host}}')
 ```
+
+#### Deploying with Argo CD (optional)
+
+If the OpenShift GitOps operator is installed, Argo CD can own the deployment and keep it in sync with the `main` branch. It renders the same chart, so nothing differs from a manual install.
+
+```bash
+oc label namespace ${PROJECT} argocd.argoproj.io/managed-by=openshift-gitops
+oc apply -f deploy/argocd/appproject.yaml
+oc apply -f deploy/argocd/application.yaml
+```
+
+See [deploy/argocd/README.md](deploy/argocd/README.md) for per-cluster values files.
 
 #### Testing model access before deploying
 
@@ -266,7 +277,7 @@ oc get pods -n ${PROJECT}
 echo https://$(oc get route/frontend -n ${PROJECT} --template='{{.spec.host}}')
 ```
 
-3. Run the Helm tests. They verify that the LLM endpoint responds and that the RAG API and ingestion service report healthy.
+3. Run the Helm test. It checks the health endpoint of every enabled service and sends one chat completion to the LLM.
 
 ```bash
 helm test assistant --namespace ${PROJECT}
@@ -304,7 +315,7 @@ oc delete project ${PROJECT}
 
 The demo follows one storyline, from deployment to portability. Each step builds on the previous one.
 
-1. **Deploy the full stack** with a single `helm install` (or `terraform apply`), then show the pods, Routes, and InferenceServices coming up.
+1. **Deploy the full stack** with a single `helm install` (or an Argo CD sync), then show the pods, Routes, and InferenceServices coming up.
 2. **Upload company documents** to the MinIO bucket and watch the ingestion workflow run in n8n: parse, chunk, embed, index, notify.
 3. **Ask a question in text.** The answer is grounded in the uploaded documents and the citations panel shows the source file and page.
 4. **Ask the same question by voice.** The avatar answers with lip-synced speech. Interrupt it mid-sentence to show barge-in.
@@ -323,24 +334,30 @@ Target layout. Directories marked *planned* are not in the repository yet.
 .
 ├── README.md
 ├── LICENSE
-├── docs/
-│   └── images/               # Architecture diagram and screenshots
+├── chart/                        # Helm chart (template layout): datastores, n8n, LiveKit,
+│   ├── Chart.yaml                #   application services, and model InferenceServices
+│   ├── values.yaml               # Default configuration: models, images, sizing
+│   ├── values-demo-cluster.yaml  # Example per-cluster overrides, used by Argo CD
+│   └── templates/                # Resources plus the Helm test (test-model-access.yaml)
 ├── deploy/
-│   ├── helm/                 # planned: umbrella chart for frontend, RAG API, ingestion, voice agent,
-│   │                         #   PostgreSQL, Qdrant, MinIO, n8n, LiveKit, optional model InferenceServices
-│   └── terraform/            # planned: namespace and Helm release automation
-├── n8n/workflows/            # planned: exported workflow JSON (chat, ingestion, classification,
-│                             #   request intake and approval, transcript archival)
-├── frontend/                 # planned: React + LiveKit chat and avatar UI
+│   ├── argocd/                   # Argo CD AppProject and Application (optional GitOps path)
+│   └── bootstrap/                # Admin-only operator install for bare clusters (optional)
+├── scripts/
+│   ├── check-prereqs.sh          # Verifies cluster prerequisites and permissions
+│   └── create-secrets.sh         # Creates the Secrets the chart expects
+├── docs/
+│   └── images/                   # Architecture diagram and screenshots
+├── n8n/workflows/                # planned: exported workflow JSON
+├── frontend/                     # planned: React + LiveKit chat and avatar UI
 ├── services/
-│   ├── rag-api/              # planned: retrieval, memory, guardrails, classification, tickets (FastAPI)
-│   ├── ingestion/            # planned: Docling parsing, chunking, embeddings, Qdrant upsert (FastAPI)
-│   └── voice-agent/          # planned: LiveKit Agents worker (STT, RAG API, TTS, avatar)
-├── data/sample-docs/         # planned: sample policies, invoices, and contracts for the demo
-└── .github/workflows/        # planned: CI for helm lint, tests, and container builds
+│   ├── rag-api/                  # planned: retrieval, memory, guardrails, classification, tickets
+│   ├── ingestion/                # planned: Docling parsing, chunking, embeddings, Qdrant upsert
+│   └── voice-agent/              # planned: LiveKit Agents worker (STT, RAG API, TTS, avatar)
+├── data/sample-docs/             # planned: sample documents for the demo
+└── .github/workflows/            # planned: CI for helm lint, tests, and container builds
 ```
 
-Today the repository contains this README, the LICENSE placeholder, `docs/images/`, and the quickstart template chart under `chart/`. The template chart will move to `deploy/helm/` and become the umbrella chart.
+Directories marked *planned* are not in the repository yet. Application services are disabled in the chart until their images are published.
 
 ## References
 
@@ -356,7 +373,7 @@ Today the repository contains this README, the LICENSE placeholder, `docs/images
 
 ## Technical details
 
-**Model endpoints.** Every model is consumed through an OpenAI-compatible API: chat completions for the LLM and guardrails, audio transcriptions for Whisper, audio speech for TTS, and embeddings for the indexing model. Each model has three values (`endpoint`, `name`, `apiKey`) and a `deploy` toggle. Switching from a local InferenceService to a MaaS endpoint, or to a frontier provider as a fallback, is a values change with no code change.
+**Model endpoints.** Every model is consumed through an OpenAI-compatible API: chat completions for the LLM and guardrails, audio transcriptions for Whisper, audio speech for TTS, and embeddings for the indexing model. Each model has a `deploy` toggle plus `endpoint` and `servedModelName` values; API keys live in the models Secret. Switching from a local InferenceService to a MaaS endpoint, or to a frontier provider as a fallback, is a values change with no code change.
 
 **RAG API.** A FastAPI service that owns retrieval, memory, guardrails, classification, and tickets so that text chat, voice, and n8n all share one grounded answer path. Main endpoints: `POST /v1/chat` (grounded answer with citations and memory), `POST /v1/search` (retrieval only), `POST /v1/classify` (document type and field extraction to JSON), `POST /v1/tickets` and `PATCH /v1/tickets/{id}` (service request state), `GET /v1/voice/token` (LiveKit room token for the browser).
 
@@ -368,7 +385,7 @@ Today the repository contains this README, the LICENSE placeholder, `docs/images
 
 **Avatar providers.** The provider is selected by a single value. Simli, HeyGen, and Tavus are supported through their LiveKit plugins. An open-source option based on Ready Player Me is planned.
 
-**Guardrails.** Input and output checks run in the RAG API with a provider switch: `none`, `llama-guard` (a Llama Guard model served on OpenShift AI), or `trustyai` (the TrustyAI Guardrails orchestrator). Blocked requests return a safe message and are logged.
+**Guardrails.** Input and output checks run in the RAG API with a provider switch: `none`, `granite-guardian` (Granite Guardian 3.3 8B served on OpenShift AI, the chart default), `llama-guard`, or `trustyai` (the TrustyAI Guardrails orchestrator). Blocked requests return a safe message and are logged.
 
 **Workflows.** The five n8n workflows call the RAG API and ingestion service by their in-cluster service names. Slack and Google Docs credentials are added in the n8n UI after import, not stored in the chart.
 

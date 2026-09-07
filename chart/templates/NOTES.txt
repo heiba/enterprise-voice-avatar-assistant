@@ -1,0 +1,31 @@
+{{ .Chart.Name }} {{ .Chart.Version }} installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Routes (hosts are assigned by OpenShift when global.domain is empty):
+{{- if .Values.frontend.enabled }}
+  frontend       https://{{ include "assistant.publicHost" (dict "root" . "name" "frontend" "override" .Values.frontend.publicHost) | default "<see oc get route frontend>" }}
+{{- end }}
+{{- if .Values.n8n.enabled }}
+  n8n            https://{{ include "assistant.publicHost" (dict "root" . "name" "n8n" "override" .Values.n8n.publicHost) | default "<see oc get route n8n>" }}
+{{- end }}
+{{- if and .Values.minio.enabled .Values.minio.console.route }}
+  minio console  https://{{ include "assistant.publicHost" (dict "root" . "name" "minio-console" "override" .Values.minio.console.publicHost) | default "<see oc get route minio-console>" }}
+{{- end }}
+{{- if .Values.livekit.enabled }}
+  livekit        wss://{{ include "assistant.publicHost" (dict "root" . "name" "livekit" "override" .Values.livekit.publicHost) | default "<see oc get route livekit>" }}
+{{- end }}
+
+Models:
+{{- range $key := list "llm" "stt" "embeddings" "guardrails" }}
+{{- $m := index $.Values.models $key }}
+{{- if $m.deploy }}
+  {{ printf "%-11s" $key }} InferenceService {{ $m.name }} (in-cluster)
+{{- else if $m.endpoint }}
+  {{ printf "%-11s" $key }} external {{ $m.endpoint }}
+{{- end }}
+{{- end }}
+  tts         {{ if .Values.models.tts.deploy }}Kokoro (in-cluster, CPU){{ else }}external {{ .Values.models.tts.endpoint }}{{ end }}
+
+Next steps:
+  oc get pods -n {{ .Release.Namespace }}            # model pods take several minutes on first start
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+  Import the workflows from n8n/workflows into n8n and attach your Slack and Google credentials.

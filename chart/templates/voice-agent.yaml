@@ -1,0 +1,48 @@
+{{- if .Values.voiceAgent.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-agent
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "voice-agent") | nindent 4 }}
+spec:
+  replicas: {{ .Values.voiceAgent.replicas }}
+  selector:
+    matchLabels:
+      {{- include "assistant.selector" (dict "root" . "name" "voice-agent") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "assistant.componentLabels" (dict "root" . "name" "voice-agent") | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 16 }}
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: voice-agent
+          image: {{ include "assistant.image" (dict "root" . "name" "voice-agent" "override" .Values.voiceAgent.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: assistant-config
+            - secretRef:
+                name: {{ .Values.secrets.models }}
+            - secretRef:
+                name: {{ .Values.secrets.livekit }}
+            - secretRef:
+                name: {{ .Values.secrets.integrations }}
+                optional: true
+          env:
+            - name: HOME
+              value: /tmp
+          resources:
+            {{- toYaml .Values.voiceAgent.resources | nindent 12 }}
+          securityContext:
+            {{- include "assistant.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

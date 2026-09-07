@@ -11,16 +11,16 @@ images:
 
 voiceAgent:
   enabled: true
-  image: ghcr.io/heiba/assistant-voice-agent:sha-b716a1b
+  image: ghcr.io/heiba/assistant-voice-agent:sha-49a8fe0
 frontend:
   enabled: true
-  image: ghcr.io/heiba/assistant-frontend:sha-b716a1b
+  image: ghcr.io/heiba/assistant-frontend:sha-49a8fe0
 ragApi:
   enabled: true
-  image: ghcr.io/heiba/assistant-rag-api:sha-b716a1b
+  image: ghcr.io/heiba/assistant-rag-api:sha-49a8fe0
 ingestion:
   enabled: true
-  image: ghcr.io/heiba/assistant-ingestion:sha-b716a1b
+  image: ghcr.io/heiba/assistant-ingestion:sha-49a8fe0
 
 models:
   # The LLM, embeddings, and guardrails come from this chart. Whisper reuses the

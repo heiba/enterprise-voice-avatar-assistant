@@ -41,8 +41,6 @@ qdrant:
   route: true
 
 livekit:
-  # Temporary while the browser media path is being validated.
-  logLevel: debug
   turn:
     # TURN over TLS behind a passthrough Route. Needs the cluster's wildcard
     # ingress certificate copied into the namespace as a kubernetes.io/tls

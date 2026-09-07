@@ -1,0 +1,41 @@
+[project]
+name = "ingestion"
+version = "0.1.0"
+description = "Document ingestion for the enterprise voice avatar assistant: Docling parsing, chunking, embeddings, Qdrant upsert"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic-settings>=2.5",
+  "python-multipart>=0.0.9",
+  "httpx>=0.27",
+  "openai>=1.50",
+  "qdrant-client>=1.12",
+  "boto3>=1.35",
+  "psycopg[binary]>=3.2",
+  "docling>=2.40",
+  "transformers>=4.44",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.uv]
+package = false
+
+# CPU-only torch on Linux keeps the container image several GiB smaller.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.ruff]
+line-length = 110
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

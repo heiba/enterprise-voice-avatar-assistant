@@ -351,10 +351,10 @@ Target layout. Directories marked *planned* are not in the repository yet.
 ├── frontend/                     # planned: React + LiveKit chat and avatar UI
 ├── services/
 │   ├── rag-api/                  # planned: retrieval, memory, guardrails, classification, tickets
-│   ├── ingestion/                # planned: Docling parsing, chunking, embeddings, Qdrant upsert
+│   ├── ingestion/                # Docling parsing, chunking, embeddings, Qdrant upsert (FastAPI)
 │   └── voice-agent/              # planned: LiveKit Agents worker (STT, RAG API, TTS, avatar)
-├── data/sample-docs/             # planned: sample documents for the demo
-└── .github/workflows/            # planned: CI for helm lint, tests, and container builds
+├── data/sample-docs/             # Synthetic sample documents for the demo
+└── .github/workflows/            # CI: helm lint and tests; image builds published to ghcr.io
 ```
 
 Directories marked *planned* are not in the repository yet. Application services are disabled in the chart until their images are published.

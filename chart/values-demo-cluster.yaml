@@ -3,15 +3,21 @@
 global:
   domain: apps.ocp.6s896.sandbox2112.opentlc.com
 
-# Application images are not published yet; enable once CI pushes them.
+# Application images are built by .github/workflows/build-images.yaml and pushed
+# to GitHub's container registry. The workflow rewrites the per-service image
+# tags below after every successful build.
+images:
+  registry: ghcr.io/heiba
+
 frontend:
   enabled: false
 ragApi:
   enabled: false
-ingestion:
-  enabled: false
 voiceAgent:
   enabled: false
+ingestion:
+  enabled: true
+  image: ghcr.io/heiba/assistant-ingestion:latest
 
 models:
   # The LLM, embeddings, and guardrails come from this chart. Whisper reuses the

@@ -1,0 +1,224 @@
+{
+  "name": "WF6 SLA escalation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-1111-5555-aaaa-000000000001",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.RAG_API_URL }}/v1/tickets/stale",
+        "options": {}
+      },
+      "id": "a1b2c3d4-1111-5555-aaaa-000000000002",
+      "name": "Fetch stale tickets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst remind = data.remind || [];\nconst escalate = data.escalate || [];\nif (remind.length === 0 && escalate.length === 0) {\n  return [];\n}\nreturn [{ json: { remind, escalate, has_reminders: remind.length > 0, has_escalations: escalate.length > 0 } }];"
+      },
+      "id": "a1b2c3d4-1111-5555-aaaa-000000000003",
+      "name": "Check for stale tickets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.first().json;\nconst results = [];\nfor (const t of items.escalate) {\n  results.push({ json: { ticket_ref: t.ticket_ref, title: t.title, current_priority: t.priority, requester: t.requester || '-', pending_minutes: Math.round(t.pending_minutes) } });\n}\nreturn results;"
+      },
+      "id": "a1b2c3d4-1111-5555-aaaa-000000000004",
+      "name": "Split escalations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RAG_API_URL }}/v1/tickets/stale/escalate?ticket_ref={{ $json.ticket_ref }}&current_priority={{ $json.current_priority }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-1111-5555-aaaa-000000000005",
+      "name": "Escalate priority",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        -200
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#assistant-tickets"
+        },
+        "otherOptions": {},
+        "text": "=:rotating_light: *SLA escalation* — {{ $('Split escalations').first().json.ticket_ref }} ({{ $('Split escalations').first().json.title }}) has been pending approval for {{ $('Split escalations').first().json.pending_minutes }} minutes. Priority escalated from {{ $json.old_priority }} to {{ $json.new_priority }}. Requester: {{ $('Split escalations').first().json.requester }}."
+      },
+      "id": "a1b2c3d4-1111-5555-aaaa-000000000006",
+      "name": "Notify escalation",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1300,
+        -200
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.first().json;\nconst remind = items.remind || [];\nif (remind.length === 0) return [];\nconst lines = remind.map(t => `• *${t.ticket_ref}* ${t.title} — ${Math.round(t.pending_minutes)}m pending (${t.priority}, requester: ${t.requester || '-'})`);\nconst text = `:hourglass_flowing_sand: *Approval reminder* — ${remind.length} ticket(s) awaiting approval:\\n${lines.join('\\n')}`;\nreturn [{ json: { text } }];"
+      },
+      "id": "a1b2c3d4-1111-5555-aaaa-000000000007",
+      "name": "Build reminder message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#assistant-approvals"
+        },
+        "otherOptions": {},
+        "text": "={{ $json.text }}"
+      },
+      "id": "a1b2c3d4-1111-5555-aaaa-000000000008",
+      "name": "Post reminder",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1040,
+        200
+      ],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch stale tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch stale tickets": {
+      "main": [
+        [
+          {
+            "node": "Check for stale tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for stale tickets": {
+      "main": [
+        [
+          {
+            "node": "Split escalations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build reminder message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split escalations": {
+      "main": [
+        [
+          {
+            "node": "Escalate priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalate priority": {
+      "main": [
+        [
+          {
+            "node": "Notify escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build reminder message": {
+      "main": [
+        [
+          {
+            "node": "Post reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "active": false
+}

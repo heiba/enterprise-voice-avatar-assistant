@@ -9,7 +9,10 @@ DELETE /v1/sessions/{id}            forget a conversation
 GET/PUT/DELETE /v1/users/{id}/memory   long-lived facts injected into prompts
 POST /v1/classify                   document type and fields (text, or bucket/key via the ingestion service)
 POST /v1/tickets, GET /v1/tickets, GET /v1/tickets/{ref}, PATCH /v1/tickets/{ref}
+GET  /v1/tickets/stale              tickets past SLA thresholds (for escalation workflows)
+POST /v1/tickets/stale/escalate     bump priority of a stale ticket
 POST /v1/requests                   service request intake: classify, create ticket, notify n8n
+GET  /v1/knowledge-gaps/digest      aggregated unanswered questions over a time window
 GET  /v1/voice/token                LiveKit token for the browser
 GET  /v1/info                       active models and providers (for the diagnostics panel)
 """
@@ -23,7 +26,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from . import classify, clients, memory, notifications, rag, retrieval, tickets, voice
+from . import classify, clients, knowledge_gaps, memory, notifications, rag, retrieval, tickets, voice
 from .config import settings
 from .schemas import (
     ChatRequest,
@@ -188,6 +191,26 @@ async def list_tickets(status: str | None = None, limit: int = Query(default=50,
     return await asyncio.to_thread(tickets.list_tickets, status, limit)
 
 
+@app.get("/v1/tickets/stale")
+async def stale_tickets(
+    reminder_minutes: int | None = None,
+    escalation_minutes: int | None = None,
+):
+    return await asyncio.to_thread(
+        knowledge_gaps.stale_tickets, reminder_minutes, escalation_minutes
+    )
+
+
+@app.post("/v1/tickets/stale/escalate")
+async def escalate_stale_ticket(ticket_ref: str = Query(...), current_priority: str = Query(...)):
+    result = await asyncio.to_thread(
+        knowledge_gaps.escalate_ticket, ticket_ref, current_priority
+    )
+    if result is None:
+        raise HTTPException(status_code=422, detail="already at maximum priority")
+    return result
+
+
 @app.get("/v1/tickets/{ref}", response_model=Ticket)
 async def get_ticket(ref: str):
     return await asyncio.to_thread(tickets.get, ref)
@@ -202,6 +225,11 @@ async def update_ticket(ref: str, data: TicketUpdate):
 async def request_intake(request: RequestIntake):
     ticket, classification, notified = await asyncio.to_thread(tickets.intake, request)
     return RequestIntakeResponse(ticket=ticket, classification=classification, notified=notified)
+
+
+@app.get("/v1/knowledge-gaps/digest")
+async def knowledge_gap_digest(hours: int = Query(default=24, ge=1, le=720)):
+    return await asyncio.to_thread(knowledge_gaps.digest, hours)
 
 
 @app.get("/v1/voice/token", response_model=VoiceTokenResponse)

@@ -84,3 +84,16 @@ def test_voice_token_is_issued():
 def test_tickets_need_a_database():
     with TestClient(app) as client:
         assert client.post("/v1/tickets", json={"title": "Laptop"}).status_code == 503
+
+
+def test_stale_tickets_without_database():
+    with TestClient(app) as client:
+        body = client.get("/v1/tickets/stale").json()
+        assert body == {"remind": [], "escalate": []}
+
+
+def test_knowledge_gap_digest_without_database():
+    with TestClient(app) as client:
+        body = client.get("/v1/knowledge-gaps/digest", params={"hours": 24}).json()
+        assert body["total_gaps"] == 0
+        assert body["top_questions"] == []

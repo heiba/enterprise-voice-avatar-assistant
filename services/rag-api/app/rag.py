@@ -5,7 +5,7 @@ import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
-from . import clients, guardrails, intent, memory, retrieval, tickets
+from . import clients, guardrails, intent, knowledge_gaps, memory, retrieval, tickets
 from .config import VOICE_STYLE, settings
 from .retrieval import Hit
 from .schemas import ChatRequest, ChatResponse, Citation, GuardrailInfo, RequestIntake, Ticket
@@ -135,6 +135,10 @@ def answer(request: ChatRequest) -> ChatResponse:
         hits = hits_future.result()
     if kind == "request":
         return file_request(request, session_id, info)
+
+    top_score = max((h.score for h in hits), default=0.0)
+    knowledge_gaps.record(session_id, request.message, top_score, len(hits))
+
     user_memory = memory.get_user_memory(request.user_id) if request.user_id else {}
     messages = build_messages(request.message, hits, history, request.mode, user_memory)
 

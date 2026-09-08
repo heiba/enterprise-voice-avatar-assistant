@@ -17,16 +17,16 @@ voiceAgent:
   extraEnv:
     # Tavus stock face "Jackie - Office"; overrides the value in the assistant-integrations secret.
     TAVUS_FACE_ID: r67d1c9cac37
-  image: ghcr.io/heiba/assistant-voice-agent:sha-4b16dd2
+  image: ghcr.io/heiba/assistant-voice-agent:sha-a154934
 frontend:
   enabled: true
-  image: ghcr.io/heiba/assistant-frontend:sha-4b16dd2
+  image: ghcr.io/heiba/assistant-frontend:sha-a154934
 ragApi:
   enabled: true
-  image: ghcr.io/heiba/assistant-rag-api:sha-4b16dd2
+  image: ghcr.io/heiba/assistant-rag-api:sha-a154934
 ingestion:
   enabled: true
-  image: ghcr.io/heiba/assistant-ingestion:sha-4b16dd2
+  image: ghcr.io/heiba/assistant-ingestion:sha-a154934
 
 models:
   tts:

@@ -8,7 +8,7 @@ metadata:
 spec:
   project: voice-avatar-assistant
   source:
-    repoURL: https://github.com/heiba/enterprise-voice-avatar-assistant.git
+    repoURL: https://github.com/rh-ai-quickstart/enterprise-voice-avatar-assistant.git
     targetRevision: main
     path: chart
     helm:

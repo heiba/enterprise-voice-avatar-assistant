@@ -157,7 +157,7 @@ Tested with (September 2026, single node with 4x NVIDIA L4):
 | Red Hat OpenShift AI | 3.5.0, KServe standard deployment mode |
 | NVIDIA GPU Operator | 25.3.4 (also verified by a contributor with 26.3.3) |
 | Node Feature Discovery Operator | 4.20.0 |
-| NVIDIA driver / CUDA | see the note below |
+| NVIDIA driver / CUDA | 580.82.07 / 13.0 on NVIDIA L4 (from the GPU operator) |
 | vLLM runtime image | `registry.redhat.io/rhaii/vllm-cuda-rhel9` (vLLM 0.24.0, CUDA 13.0), pinned by digest in `chart/values.yaml` |
 | OpenShift GitOps (optional) | 1.21.4 |
 | cert-manager operator (optional, trusted ingress certificate) | 1.20.0 |
@@ -167,7 +167,7 @@ Tested with (September 2026, single node with 4x NVIDIA L4):
 | Kokoro TTS (kokoro-fastapi) | 0.8.2 |
 | Helm client | 3.14 or later (tested with 3.17 and 4.2) |
 
-The GPU driver comes from the GPU operator; read the installed version on any GPU node with `oc get node <name> -o jsonpath='{.metadata.labels.nvidia\.com/cuda\.driver-version\.full}'`.
+Read the driver and CUDA versions of your own GPU nodes from the labels set by the GPU operator: `oc get nodes -L nvidia.com/cuda.driver-version.full,nvidia.com/cuda.runtime-version.full`.
 
 ### Required user permissions
 

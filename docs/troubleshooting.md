@@ -40,7 +40,7 @@ Symptoms first, then the cause, the command that confirms it, and the fix. Every
 
 **Uploads to MinIO do not trigger n8n.** Check the bucket notification: run `mc event ls local/documents` from a pod with the MinIO client (see `scripts/load-sample-docs.sh` for the pod spec). The setup Job registers the `arn:minio:sqs::N8N:webhook` target for `documents` and `inbox`; it can only do so once n8n is reachable, so re-run the Job (Argo CD sync, or `helm upgrade`) if n8n came up later.
 
-**A document shows up twice in citations.** Documents are keyed by bucket and object name; the same content under two names is two documents. List them: `oc exec deploy/rag-api -- python -c "import urllib.request; print(urllib.request.urlopen('http://ingestion:8080/v1/documents').read().decode())"`, delete one with `DELETE http://ingestion:8080/v1/documents/<doc_id>`. Re-uploading under the same name replaces all chunks.
+**A document shows up twice in citations.** Documents are keyed by bucket and object name; the same content under two names is two documents. List them: `oc exec deploy/rag-api -- .venv/bin/python -c "import urllib.request; print(urllib.request.urlopen('http://ingestion:8080/v1/documents').read().decode())"`, delete one with `DELETE http://ingestion:8080/v1/documents/<doc_id>`. Re-uploading under the same name replaces all chunks.
 
 **The loader indexed a README or other stray file.** `scripts/load-sample-docs.sh` uploads every `.md`, `.docx` and `.pdf` in `data/sample-docs/` except `README.md`; pass file names to upload a subset.
 

@@ -26,8 +26,23 @@ def _require(value: str | None, name: str) -> str:
     return value
 
 
-def build() -> Any | None:
-    """Return an avatar session object for the configured provider, or None for audio only."""
+def tavus_kwargs(face_id: str, pal_id: str | None, api_key: str, params: Any) -> dict[str, Any]:
+    """Constructor arguments for the Tavus plugin; Tavus renamed replicas to faces and personas
+    to PALs, and both plugin generations are supported."""
+    if "face_id" in params:
+        kwargs: dict[str, Any] = {"face_id": face_id, "api_key": api_key}
+        if pal_id:
+            kwargs["pal_id"] = pal_id
+        return kwargs
+    kwargs = {"replica_id": face_id, "api_key": api_key}
+    if pal_id:
+        kwargs["persona_id"] = pal_id
+    return kwargs
+
+
+def build(face_id: str | None = None) -> Any | None:
+    """Return an avatar session object for the configured provider, or None for audio only.
+    face_id overrides the configured Tavus face for this session."""
     name = provider()
     if name == "none":
         return None
@@ -45,20 +60,11 @@ def build() -> Any | None:
 
         from livekit.plugins import tavus
 
-        face_id = _require(settings.tavus_face_id or settings.tavus_replica_id, "TAVUS_FACE_ID")
+        face = _require(face_id or settings.tavus_face_id or settings.tavus_replica_id, "TAVUS_FACE_ID")
         pal_id = settings.tavus_pal_id or settings.tavus_persona_id
         api_key = _require(settings.tavus_api_key, "TAVUS_API_KEY")
-        # Tavus renamed replicas to faces and personas to PALs; support both plugin generations.
         params = inspect.signature(tavus.AvatarSession.__init__).parameters
-        if "face_id" in params:
-            kwargs: dict[str, Any] = {"face_id": face_id, "api_key": api_key}
-            if pal_id:
-                kwargs["pal_id"] = pal_id
-        else:
-            kwargs = {"replica_id": face_id, "api_key": api_key}
-            if pal_id:
-                kwargs["persona_id"] = pal_id
-        return tavus.AvatarSession(**kwargs)
+        return tavus.AvatarSession(**tavus_kwargs(face, pal_id, api_key, params))
     if name == "hedra":
         from livekit.plugins import hedra
 
@@ -84,16 +90,17 @@ def start_kwargs(avatar: Any) -> dict[str, Any]:
     return kwargs
 
 
-async def start(session: Any, room: Any) -> Any | None:
+async def start(session: Any, room: Any, face_id: str | None = None) -> Any | None:
     """Build and start the avatar for this room. The avatar publishes the agent's audio and its video."""
-    avatar = build()
+    avatar = build(face_id)
     if avatar is None:
         log.info("no avatar provider configured; publishing audio only")
         return None
     kwargs = start_kwargs(avatar)
     log.info(
-        "starting avatar provider %s (livekit url for the provider: %s)",
+        "starting avatar provider %s face=%s (livekit url for the provider: %s)",
         provider(),
+        face_id or "configured default",
         kwargs.get("livekit_url", "default"),
     )
     await avatar.start(session, room=room, **kwargs)

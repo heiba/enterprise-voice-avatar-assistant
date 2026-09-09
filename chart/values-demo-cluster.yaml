@@ -17,6 +17,11 @@ voiceAgent:
   extraEnv:
     # Tavus stock face "Jackie - Office"; overrides the value in the assistant-integrations secret.
     TAVUS_FACE_ID: r67d1c9cac37
+  # Faces offered in the UI; the voice follows the declared gender (models.tts.voices).
+  faces:
+    - id: r67d1c9cac37
+      name: Jackie
+      gender: female
   image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-voice-agent:sha-480224d
 frontend:
   enabled: true

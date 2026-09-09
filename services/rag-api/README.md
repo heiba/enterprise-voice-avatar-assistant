@@ -24,7 +24,8 @@ the voice agent, and the n8n workflows.
 | POST | `/v1/tickets/stale/escalate` | `?ticket_ref=&current_priority=` raises the priority one step |
 | POST | `/v1/requests` | service request intake: classify, create the ticket, notify n8n |
 | GET | `/v1/knowledge-gaps/digest` | `?hours=24` aggregated low-confidence questions (knowledge-gap workflow) |
-| GET | `/v1/voice/token` | LiveKit token; `session_id` maps to room `session-<id>` |
+| GET | `/v1/voice/token` | LiveKit token; `session_id` maps to room `session-<id>`; `face_id` puts the chosen avatar face in the token |
+| GET | `/v1/voice/faces` | avatar faces to choose from (`AVATAR_FACES`), with the voice each one speaks with; names and thumbnails from Tavus when `TAVUS_API_KEY` is set |
 | GET | `/v1/info` | active models and providers |
 
 Interactive docs at `/docs`.
@@ -62,6 +63,7 @@ Environment variables, provided by the Helm chart's config map and secrets. See
 | `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`, `RAG_TOP_K`, `RAG_MIN_SCORE` | retrieval |
 | `DATABASE_URL` | PostgreSQL; without it memory and tickets are disabled |
 | `LIVEKIT_PUBLIC_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | voice tokens |
+| `AVATAR_PROVIDER`, `AVATAR_FACES`, `TAVUS_FACE_ID`, `TAVUS_API_KEY`, `TTS_VOICE`, `TTS_VOICE_FEMALE`, `TTS_VOICE_MALE` | face catalog served to the UI |
 | `INGESTION_URL`, `N8N_URL` | neighbours used by classification and request intake |
 | `SERVICE_CA_FILE` | extra CA for in-cluster TLS endpoints |
 | `ASSISTANT_NAME`, `SYSTEM_PROMPT`, `BLOCKED_MESSAGE` | persona and wording |

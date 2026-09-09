@@ -61,7 +61,22 @@ export interface Info {
   guardrails: { provider: string; model: string };
   retrieval: { collection: string; top_k: number; min_score: number };
   memory: boolean;
-  voice: { livekit_url: string };
+  voice: { livekit_url: string; avatar_provider?: string; faces?: number };
+}
+
+/** An avatar face the person can pick before a voice session; the voice follows the face. */
+export interface VoiceFace {
+  id: string;
+  name: string;
+  gender: string | null;
+  voice: string;
+  thumbnail_url: string | null;
+}
+
+export interface VoiceFaces {
+  provider: string;
+  default: string | null;
+  faces: VoiceFace[];
 }
 
 export interface VoiceToken {
@@ -70,6 +85,7 @@ export interface VoiceToken {
   room: string;
   identity: string;
   session_id: string;
+  face_id?: string | null;
 }
 
 /** Published by the voice agent on the room data channel (topic "assistant") after every answer. */

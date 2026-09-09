@@ -14,6 +14,8 @@ data:
   TTS_BASE_URL: {{ include "assistant.modelEndpoint" (dict "root" . "key" "tts") | quote }}
   TTS_MODEL: {{ .Values.models.tts.servedModelName | quote }}
   TTS_VOICE: {{ .Values.models.tts.voice | quote }}
+  TTS_VOICE_FEMALE: {{ .Values.models.tts.voices.female | quote }}
+  TTS_VOICE_MALE: {{ .Values.models.tts.voices.male | quote }}
   EMBEDDINGS_BASE_URL: {{ include "assistant.modelEndpoint" (dict "root" . "key" "embeddings") | quote }}
   EMBEDDINGS_MODEL: {{ .Values.models.embeddings.servedModelName | quote }}
   GUARDRAILS_PROVIDER: {{ .Values.models.guardrails.provider | quote }}
@@ -36,3 +38,5 @@ data:
   # OpenShift service CA, trusted for in-cluster model endpoints served over TLS
   SERVICE_CA_FILE: "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
   AVATAR_PROVIDER: {{ .Values.voiceAgent.avatarProvider | quote }}
+  # Faces offered in the UI; the RAG API serves the list and the voice agent applies the choice
+  AVATAR_FACES: {{ .Values.voiceAgent.faces | default list | toJson | quote }}

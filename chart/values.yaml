@@ -269,6 +269,13 @@ models:
     image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.8.2
     servedModelName: kokoro
     voice: af_heart
+    # Voices picked for avatar faces by their declared gender (voiceAgent.faces); a face can pin
+    # its own voice instead. Kokoro names: af_*/bf_* female, am_*/bm_* male.
+    voices:
+      # Voice for faces declared female.
+      female: af_bella
+      # Voice for faces declared male.
+      male: am_michael
     resources:
       requests:
         cpu: "1"
@@ -329,6 +336,12 @@ voiceAgent:
   # Extra environment for the worker; explicit entries win over the config map and secrets,
   # so non-secret provider settings such as TAVUS_FACE_ID can be pinned here.
   extraEnv: {}
+  # Faces the person can choose in the UI before a voice session (Tavus). Each entry has id
+  # (the Tavus face id), name (shown in the UI; taken from Tavus when empty) and gender
+  # (female | male, which selects the voice from models.tts.voices) or voice (pins a TTS voice).
+  # The first entry is the default; an empty list means the single face in TAVUS_FACE_ID.
+  # scripts/list-tavus-faces.sh prints the stock faces with their ids.
+  faces: []
   resources:
     requests:
       cpu: 500m

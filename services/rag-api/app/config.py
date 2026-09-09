@@ -68,6 +68,14 @@ class Settings(BaseSettings):
     livekit_api_key: str = "devkey"
     livekit_api_secret: str = "secret"
     voice_token_ttl_seconds: int = 3600
+    # Avatar faces offered in the UI (see faces.py); the voice agent applies the same catalog
+    avatar_provider: str = "none"
+    avatar_faces: str = "[]"
+    tavus_face_id: str | None = None
+    tavus_api_key: str | None = None
+    tts_voice: str = "af_heart"
+    tts_voice_female: str = "af_bella"
+    tts_voice_male: str = "am_michael"
 
     # Neighbours
     ingestion_url: str = "http://ingestion:8080"

@@ -17,7 +17,7 @@ from livekit import rtc
 from livekit.agents import Agent, AgentSession, JobContext, JobProcess, RoomOutputOptions, WorkerOptions, cli
 from livekit.plugins import openai, silero
 
-from app import avatars, helpers, rag_client
+from app import avatars, faces, helpers, rag_client
 from app.config import settings
 from app.tls import async_http_client
 
@@ -33,12 +33,14 @@ def build_stt():
     return openai.STT(model=settings.stt_model, language=settings.stt_language, client=client)
 
 
-def build_tts():
+def build_tts(face: faces.Face | None = None):
+    """TTS for this session; the voice follows the chosen avatar face (see app/faces.py)."""
     if settings.tts_provider.lower() == "elevenlabs":
         from livekit.plugins import elevenlabs
 
         return elevenlabs.TTS(
-            voice_id=settings.elevenlabs_voice_id,
+            # only a voice pinned on the face applies here: gender defaults are Kokoro names
+            voice_id=(face.voice if face and face.voice else settings.elevenlabs_voice_id),
             model=settings.elevenlabs_model,
             api_key=settings.elevenlabs_api_key,
         )
@@ -48,7 +50,7 @@ def build_tts():
         http_client=async_http_client(60),
     )
     return openai.TTS(
-        model=settings.tts_model, voice=settings.tts_voice, speed=settings.tts_speed, client=client
+        model=settings.tts_model, voice=faces.voice_for(face), speed=settings.tts_speed, client=client
     )
 
 
@@ -100,19 +102,28 @@ async def entrypoint(ctx: JobContext) -> None:
     participant = await ctx.wait_for_participant()
     session_id = helpers.session_id_from_room(ctx.room.name)
     user_id = helpers.user_id_from_identity(participant.identity if participant else None)
-    log.info("joined room %s (session %s) for participant %s", ctx.room.name, session_id, user_id)
+    face = faces.select(faces.requested_face(participant))
+    log.info(
+        "joined room %s (session %s) for participant %s; face=%s voice=%s",
+        ctx.room.name,
+        session_id,
+        user_id,
+        face.id if face else "configured default",
+        faces.voice_for(face),
+    )
 
     session = AgentSession(
         vad=ctx.proc.userdata["vad"],
         stt=build_stt(),
-        tts=build_tts(),
+        tts=build_tts(face),
         llm=build_llm(),
         allow_interruptions=True,
         min_endpointing_delay=settings.min_endpointing_delay,
     )
     try:
         avatar = await asyncio.wait_for(
-            avatars.start(session, ctx.room), timeout=settings.avatar_start_timeout_seconds
+            avatars.start(session, ctx.room, face_id=face.id if face else None),
+            timeout=settings.avatar_start_timeout_seconds,
         )
     except TimeoutError:
         log.error(

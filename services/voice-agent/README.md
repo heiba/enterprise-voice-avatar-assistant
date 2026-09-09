@@ -22,10 +22,12 @@ the LiveKit server and joins every new room. For each user turn:
 | `STT_BASE_URL`, `STT_MODEL`, `STT_API_KEY`, `STT_LANGUAGE` | Whisper defaults | OpenAI-compatible transcription |
 | `TTS_PROVIDER` | `openai` | `openai` (any OpenAI-compatible speech API, Kokoro in the chart) or `elevenlabs` |
 | `TTS_BASE_URL`, `TTS_MODEL`, `TTS_VOICE`, `TTS_SPEED` | Kokoro defaults | |
+| `TTS_VOICE_FEMALE`, `TTS_VOICE_MALE` | `af_bella`, `am_michael` | voices picked by the chosen face's gender (`app/faces.py`) |
 | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL` | unset | when `TTS_PROVIDER=elevenlabs` |
 | `AVATAR_PROVIDER` | `none` | `none`, `simli`, `tavus`, `hedra` |
 | `SIMLI_API_KEY`, `SIMLI_FACE_ID` | unset | Simli avatar |
-| `TAVUS_API_KEY`, `TAVUS_REPLICA_ID`, `TAVUS_PERSONA_ID` | unset | Tavus avatar |
+| `TAVUS_API_KEY`, `TAVUS_FACE_ID`, `TAVUS_PAL_ID` | unset | Tavus avatar (`TAVUS_REPLICA_ID`, `TAVUS_PERSONA_ID` still accepted) |
+| `AVATAR_FACES` | `[]` | JSON list of `{id, name, gender\|voice}`; the browser's choice arrives as the participant attribute `avatar_face` |
 | `HEDRA_API_KEY`, `HEDRA_AVATAR_IMAGE` | unset | Hedra avatar |
 | `SERVICE_CA_FILE` | unset | extra CA for in-cluster TLS endpoints |
 | `GREETING`, `MIN_ENDPOINTING_DELAY` | see `app/config.py` | |

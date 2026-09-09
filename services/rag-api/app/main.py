@@ -14,7 +14,8 @@ GET  /v1/tickets/stale              tickets past SLA thresholds (for escalation 
 POST /v1/tickets/stale/escalate     bump priority of a stale ticket
 POST /v1/requests                   service request intake: classify, create ticket, notify n8n
 GET  /v1/knowledge-gaps/digest      aggregated unanswered questions over a time window
-GET  /v1/voice/token                LiveKit token for the browser
+GET  /v1/voice/token                LiveKit token for the browser (face_id picks the avatar face)
+GET  /v1/voice/faces                avatar faces to choose from, with the voice each one speaks with
 GET  /v1/info                       active models and providers (for the diagnostics panel)
 """
 
@@ -27,7 +28,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from . import classify, clients, knowledge_gaps, memory, notifications, rag, retrieval, tickets, voice
+from . import classify, clients, faces, knowledge_gaps, memory, notifications, rag, retrieval, tickets, voice
 from .config import settings
 from .schemas import (
     ChatRequest,
@@ -45,6 +46,8 @@ from .schemas import (
     TicketCreate,
     TicketUpdate,
     UserMemoryItem,
+    VoiceFace,
+    VoiceFacesResponse,
     VoiceTokenResponse,
 )
 
@@ -114,7 +117,11 @@ def info():
             "min_score": settings.rag_min_score,
         },
         "memory": memory.enabled(),
-        "voice": {"livekit_url": settings.livekit_public_url or settings.livekit_url},
+        "voice": {
+            "livekit_url": settings.livekit_public_url or settings.livekit_url,
+            "avatar_provider": settings.avatar_provider,
+            "faces": len(faces.catalog()),
+        },
     }
 
 
@@ -237,14 +244,43 @@ async def knowledge_gap_digest(hours: int = Query(default=24, ge=1, le=720)):
 
 
 @app.get("/v1/voice/token", response_model=VoiceTokenResponse)
-def voice_token(session_id: str | None = None, identity: str | None = None, name: str | None = None):
+def voice_token(
+    session_id: str | None = None,
+    identity: str | None = None,
+    name: str | None = None,
+    face_id: str | None = None,
+):
     session_id = session_id or uuid.uuid4().hex
     identity = identity or f"user-{uuid.uuid4().hex[:8]}"
     room = voice.room_for_session(session_id)
+    attributes: dict[str, str] = {}
+    if face_id:
+        if faces.catalog() and faces.resolve(face_id) is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"unknown avatar face {face_id!r}; GET /v1/voice/faces lists the choices",
+            )
+        attributes[faces.FACE_ATTRIBUTE] = face_id
     return VoiceTokenResponse(
-        token=voice.mint_token(identity, room, name),
+        token=voice.mint_token(identity, room, name, attributes),
         url=settings.livekit_public_url or settings.livekit_url,
         room=room,
         identity=identity,
         session_id=session_id,
+        face_id=face_id or None,
+    )
+
+
+@app.get("/v1/voice/faces", response_model=VoiceFacesResponse)
+async def voice_faces():
+    items = await asyncio.to_thread(faces.enriched)
+    return VoiceFacesResponse(
+        provider=settings.avatar_provider,
+        default=faces.default_id(),
+        faces=[
+            VoiceFace(
+                id=f.id, name=f.name, gender=f.gender, voice=faces.voice_for(f), thumbnail_url=f.thumbnail_url
+            )
+            for f in items
+        ],
     )

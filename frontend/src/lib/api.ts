@@ -1,4 +1,4 @@
-import type { ChatResponse, Info, Notification, VoiceToken } from "../types";
+import type { ChatResponse, Info, Notification, VoiceFaces, VoiceToken } from "../types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
@@ -32,10 +32,15 @@ export function deleteSession(sessionId: string) {
   return request<{ deleted: string }>(`/v1/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
 }
 
-export function voiceToken(params: { session_id: string; identity: string; name?: string }) {
+export function voiceToken(params: { session_id: string; identity: string; name?: string; face_id?: string }) {
   const query = new URLSearchParams({ session_id: params.session_id, identity: params.identity });
   if (params.name) query.set("name", params.name);
+  if (params.face_id) query.set("face_id", params.face_id);
   return request<VoiceToken>(`/v1/voice/token?${query.toString()}`);
+}
+
+export function voiceFaces() {
+  return request<VoiceFaces>("/v1/voice/faces");
 }
 
 export function notifications(sessionId: string) {

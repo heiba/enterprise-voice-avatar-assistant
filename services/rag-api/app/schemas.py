@@ -147,6 +147,21 @@ class VoiceTokenResponse(BaseModel):
     room: str
     identity: str
     session_id: str
+    face_id: str | None = None
+
+
+class VoiceFace(BaseModel):
+    id: str
+    name: str
+    gender: str | None = None
+    voice: str
+    thumbnail_url: str | None = None
+
+
+class VoiceFacesResponse(BaseModel):
+    provider: str
+    default: str | None = None
+    faces: list[VoiceFace]
 
 
 class Notification(BaseModel):

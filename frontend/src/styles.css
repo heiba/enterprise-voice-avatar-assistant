@@ -113,6 +113,17 @@ button.cite:hover { border-color: var(--accent); }
 .voice-state.state-listening { border-color: var(--success); color: var(--success); }
 .voice-state.state-speaking { border-color: var(--accent); color: var(--accent); }
 .voice-state.state-thinking { border-color: var(--warning); color: var(--warning); }
+.voice-face { color: var(--muted); }
+.face-picker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.face-picker-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-right: 2px; }
+.face-option { display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); text-align: left; }
+.face-option:hover { border-color: var(--border-strong); background: var(--surface-3); }
+.face-option.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.face-thumb { width: 34px; height: 34px; flex: none; border-radius: 50%; object-fit: cover; background: var(--surface-3); }
+.face-thumb-initial { display: grid; place-items: center; font-weight: 700; font-size: 0.85rem; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-line); }
+.face-text { display: flex; flex-direction: column; line-height: 1.15; }
+.face-name { font-size: 0.85rem; font-weight: 600; }
+.face-voice { font-size: 0.7rem; color: var(--muted); }
 .voice-tag { background: var(--user); color: var(--text); }
 .ticket-tag { background: var(--accent-soft); color: var(--text); }
 .notice-tag { background: var(--success-soft); color: var(--success); }

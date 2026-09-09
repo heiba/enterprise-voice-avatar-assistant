@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     tts_base_url: str = "http://tts:8880/v1"
     tts_model: str = "kokoro"
     tts_voice: str = "af_heart"
+    # Voices chosen for avatar faces by gender (see faces.py); a face can pin its own voice
+    tts_voice_female: str = "af_bella"
+    tts_voice_male: str = "am_michael"
     tts_api_key: str = "none"
     tts_speed: float = 1.0
     elevenlabs_api_key: str | None = None
@@ -51,6 +54,8 @@ class Settings(BaseSettings):
     simli_face_id: str | None = None
     tavus_api_key: str | None = None
     tavus_face_id: str | None = None  # stock or custom face, e.g. r3f4182ef554
+    # Faces the browser can choose from, JSON list of {id, name, gender|voice}; see faces.py
+    avatar_faces: str = "[]"
     tavus_pal_id: str | None = None  # optional; the plugin's stock PAL is used when empty
     # Older Tavus names (replica -> face, persona -> PAL); still accepted
     tavus_replica_id: str | None = None

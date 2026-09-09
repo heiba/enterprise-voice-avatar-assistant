@@ -158,7 +158,7 @@ livekit:
 # the model name clients send in requests.
 # ---------------------------------------------------------------------------
 models:
-  runtimeImage: registry.redhat.io/rhaiis/vllm-cuda-rhel9:3.2.4
+  runtimeImage: registry.redhat.io/rhaii/vllm-cuda-rhel9@sha256:ba060ec145e1b7ac3a3b25b89fc75f7d146746156990ff5858235eaa9d158e32
 
   llm:
     deploy: true

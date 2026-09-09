@@ -2,10 +2,12 @@ interface Props {
   userName: string;
   onUserName: (name: string) => void;
   onReset: () => void;
+  onArchive: () => void;
+  canArchive: boolean;
   sessionId: string;
 }
 
-export function Header({ userName, onUserName, onReset, sessionId }: Props) {
+export function Header({ userName, onUserName, onReset, onArchive, canArchive, sessionId }: Props) {
   return (
     <header className="header">
       <div className="brand">
@@ -25,6 +27,15 @@ export function Header({ userName, onUserName, onReset, sessionId }: Props) {
             aria-label="Your name, used to remember facts about you"
           />
         </label>
+        <button
+          type="button"
+          className="secondary"
+          onClick={onArchive}
+          disabled={!canArchive}
+          title="Save this conversation to Google Docs and index it for later questions"
+        >
+          Archive transcript
+        </button>
         <button type="button" className="secondary" onClick={onReset} title={`Current session ${sessionId.slice(0, 8)}`}>
           New conversation
         </button>

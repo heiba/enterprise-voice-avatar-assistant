@@ -49,3 +49,9 @@ export function ackNotifications(sessionId: string, ids: number[]) {
   });
 }
 
+export function archiveSession(sessionId: string) {
+  return request<{ session_id: string; requested: boolean }>(`/v1/sessions/${encodeURIComponent(sessionId)}/archive`, {
+    method: "POST",
+  });
+}
+

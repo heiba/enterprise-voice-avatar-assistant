@@ -115,6 +115,19 @@ export default function App() {
     api.deleteSession(old).catch(() => undefined);
   }, [sessionId]);
 
+  const archive = useCallback(async () => {
+    try {
+      const result = await api.archiveSession(sessionId);
+      const text = result.requested
+        ? "Archiving this conversation: the transcript is being saved to Google Docs and indexed, so later questions can cite it."
+        : "The archival workflow could not be reached; check that n8n is running.";
+      setMessages((m) => [...m, { id: newId(), role: "assistant", content: text, notice: true }]);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setMessages((m) => [...m, { id: newId(), role: "assistant", content: `Archival failed: ${detail}`, error: true }]);
+    }
+  }, [sessionId]);
+
   const onAssistantTurn = useCallback((turn: AssistantTurn) => {
     const entries: ChatMessage[] = [];
     if (turn.question) entries.push({ id: newId(), role: "user", content: turn.question, voice: true });
@@ -143,7 +156,7 @@ export default function App() {
   return (
     <ErrorBoundary>
     <div className="app">
-      <Header userName={userName} onUserName={setUserName} onReset={reset} sessionId={sessionId} />
+      <Header userName={userName} onUserName={setUserName} onReset={reset} sessionId={sessionId}  onArchive={archive} canArchive={messages.length > 0 && !busy} />
       <div className="banner" role="note">
         <strong>AI-generated answers</strong> from company documents. Verify against the cited source before acting on them.
       </div>

@@ -130,3 +130,20 @@ def record_extraction(
            updated_at = now()""",
         (doc_id, source, source_uri, doc_type, json.dumps(extracted)),
     )
+
+
+def request_archive(session_id: str) -> bool:
+    """Ask n8n (WF5) to archive the session transcript: Google Doc, re-ingestion, Slack notice."""
+    import httpx
+
+    url = settings.n8n_url.rstrip("/") + settings.n8n_archive_webhook_path
+    try:
+        with httpx.Client(timeout=10) as http:
+            response = http.post(url, json={"session_id": session_id})
+        if response.status_code >= 400:
+            log.warning("n8n archive webhook returned %s", response.status_code)
+            return False
+        return True
+    except httpx.HTTPError as exc:
+        log.warning("n8n archive webhook unreachable: %s", exc)
+        return False

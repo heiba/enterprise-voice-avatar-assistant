@@ -4,6 +4,7 @@ GET  /healthz, /readyz
 POST /v1/chat                       grounded answer with citations, memory, guardrails (text or voice mode)
 POST /v1/search                     retrieval only
 GET  /v1/sessions/{id}/messages     conversation history
+POST /v1/sessions/{id}/archive       trigger the transcript archival workflow (WF5)
 GET  /v1/sessions/{id}/transcript   plain-text transcript (for archival workflows)
 DELETE /v1/sessions/{id}            forget a conversation
 GET/PUT/DELETE /v1/users/{id}/memory   long-lived facts injected into prompts
@@ -145,6 +146,13 @@ async def ack_notifications(session_id: str, data: NotificationAck):
     return {"acknowledged": data.ids}
 
 
+@app.post("/v1/sessions/{session_id}/archive", status_code=202)
+async def archive_session(session_id: str):
+    """Hand the session to the transcript archival workflow (Google Doc, re-ingestion, Slack notice)."""
+    requested = await asyncio.to_thread(memory.request_archive, session_id)
+    return {"session_id": session_id, "requested": requested}
+
+
 @app.get("/v1/sessions/{session_id}/transcript", response_class=PlainTextResponse)
 async def session_transcript(session_id: str):
     return await asyncio.to_thread(memory.transcript, session_id)
@@ -196,16 +204,12 @@ async def stale_tickets(
     reminder_minutes: int | None = None,
     escalation_minutes: int | None = None,
 ):
-    return await asyncio.to_thread(
-        knowledge_gaps.stale_tickets, reminder_minutes, escalation_minutes
-    )
+    return await asyncio.to_thread(knowledge_gaps.stale_tickets, reminder_minutes, escalation_minutes)
 
 
 @app.post("/v1/tickets/stale/escalate")
 async def escalate_stale_ticket(ticket_ref: str = Query(...), current_priority: str = Query(...)):
-    result = await asyncio.to_thread(
-        knowledge_gaps.escalate_ticket, ticket_ref, current_priority
-    )
+    result = await asyncio.to_thread(knowledge_gaps.escalate_ticket, ticket_ref, current_priority)
     if result is None:
         raise HTTPException(status_code=422, detail="already at maximum priority")
     return result

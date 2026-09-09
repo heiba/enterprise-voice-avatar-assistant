@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     ingestion_url: str = "http://ingestion:8080"
     n8n_url: str = "http://n8n:5678"
     n8n_request_webhook_path: str = "/webhook/request-intake"
+    n8n_archive_webhook_path: str = "/webhook/archive-transcript"
 
     # SLA escalation
     sla_reminder_minutes: int = 60

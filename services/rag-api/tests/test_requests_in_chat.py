@@ -196,3 +196,12 @@ def test_notify_ticket_is_noop_without_session():
 def test_request_reply_wording():
     assert "needs approval" in rag.request_reply(make_ticket("pending_approval"))
     assert "No approval is needed" in rag.request_reply(make_ticket("approved"))
+
+
+def test_archive_session_calls_n8n(monkeypatch):
+    calls = []
+    monkeypatch.setattr(memory, "request_archive", lambda sid: calls.append(sid) or True)
+    with TestClient(app) as client:
+        r = client.post("/v1/sessions/s1/archive")
+    assert r.status_code == 202 and r.json() == {"session_id": "s1", "requested": True}
+    assert calls == ["s1"]

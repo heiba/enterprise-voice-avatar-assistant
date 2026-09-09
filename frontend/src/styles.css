@@ -114,14 +114,16 @@ button.cite:hover { border-color: var(--accent); }
 .voice-state.state-speaking { border-color: var(--accent); color: var(--accent); }
 .voice-state.state-thinking { border-color: var(--warning); color: var(--warning); }
 .voice-face { color: var(--muted); }
-.face-picker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.face-picker-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-right: 2px; }
-.face-option { display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); text-align: left; }
+.face-picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.face-picker-label { grid-column: 1 / -1; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.face-option { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 5px 12px 5px 5px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); text-align: left; }
 .face-option:hover { border-color: var(--border-strong); background: var(--surface-3); }
 .face-option.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.face-thumb { width: 34px; height: 34px; flex: none; border-radius: 50%; object-fit: cover; background: var(--surface-3); }
-.face-thumb-initial { display: grid; place-items: center; font-weight: 700; font-size: 0.85rem; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-line); }
-.face-name { font-size: 0.85rem; font-weight: 600; }
+.face-thumb { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 0.9rem; color: var(--text); background: var(--surface-3); border: 1px solid var(--border-strong); }
+.face-thumb.female { color: #ff8fb1; background: #ea4b7126; border-color: #ea4b7180; }
+.face-thumb.male { color: #7cc4ff; background: #3b8ee826; border-color: #3b8ee880; }
+.face-option.selected .face-thumb { border-color: var(--accent); }
+.face-name { font-size: 0.9rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .voice-tag { background: var(--user); color: var(--text); }
 .ticket-tag { background: var(--accent-soft); color: var(--text); }
 .notice-tag { background: var(--success-soft); color: var(--success); }

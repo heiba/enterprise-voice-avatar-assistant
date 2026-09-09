@@ -109,7 +109,7 @@ export function VoicePanel({ sessionId, userName, onAssistantTurn, onActiveChang
         </div>
         {faces.length > 1 && (
           <div className="face-picker" role="radiogroup" aria-label="Avatar face">
-            <span className="face-picker-label">Avatar</span>
+            <span className="face-picker-label">Avatar face</span>
             {faces.map((f) => (
               <button
                 key={f.id}
@@ -152,30 +152,12 @@ export function VoicePanel({ sessionId, userName, onAssistantTurn, onActiveChang
 }
 
 function FaceThumb({ face }: { face: VoiceFace }) {
-  const [failed, setFailed] = useState(false);
-  if (!face.thumbnail_url || failed) {
-    return (
-      <span className="face-thumb face-thumb-initial" aria-hidden="true">
-        {face.name.trim().charAt(0).toUpperCase() || "?"}
-      </span>
-    );
-  }
+  // Tavus "thumbnails" are full replica videos, too heavy to load four of them for a picker,
+  // so the picker shows the initial and the face itself appears when the session starts.
   return (
-    <video
-      className="face-thumb"
-      src={face.thumbnail_url}
-      muted
-      loop
-      playsInline
-      preload="metadata"
-      aria-hidden="true"
-      onLoadedMetadata={(e) => {
-        e.currentTarget.currentTime = 0.1; // show a frame instead of a black box
-      }}
-      onMouseEnter={(e) => e.currentTarget.play().catch(() => undefined)}
-      onMouseLeave={(e) => e.currentTarget.pause()}
-      onError={() => setFailed(true)}
-    />
+    <span className={`face-thumb${face.gender ? ` ${face.gender}` : ""}`} aria-hidden="true">
+      {face.name.trim().charAt(0).toUpperCase() || "?"}
+    </span>
   );
 }
 

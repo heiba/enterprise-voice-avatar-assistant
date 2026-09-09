@@ -1,4 +1,5 @@
 {
+  "id": "GnV0drMMpmRWQjdB",
   "name": "WF2 Document ingestion",
   "nodes": [
     {
@@ -225,7 +226,13 @@
         1960,
         0
       ],
-      "continueOnFail": true
+      "continueOnFail": true,
+      "credentials": {
+        "slackApi": {
+          "id": "AssistantSlack01",
+          "name": "Slack account"
+        }
+      }
     }
   ],
   "connections": {

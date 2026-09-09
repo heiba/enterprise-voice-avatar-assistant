@@ -1,4 +1,5 @@
 {
+  "id": "taLY45YDU4nDoR5d",
   "name": "WF5 Transcript archival",
   "nodes": [
     {
@@ -200,7 +201,13 @@
         2300,
         0
       ],
-      "continueOnFail": true
+      "continueOnFail": true,
+      "credentials": {
+        "slackApi": {
+          "id": "AssistantSlack01",
+          "name": "Slack account"
+        }
+      }
     },
     {
       "parameters": {

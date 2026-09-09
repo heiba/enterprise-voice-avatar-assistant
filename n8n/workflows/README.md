@@ -15,6 +15,8 @@ cluster-specific values.
 | `wf6-sla-escalation.json` | Schedule (every 15 min) | checks for tickets stuck in `pending_approval`; sends a reminder to `#assistant-approvals` after `SLA_REMINDER_MINUTES` (default 60) and escalates priority after `SLA_ESCALATION_MINUTES` (default 240), posting to `#assistant-tickets` |
 | `wf7-knowledge-gap-digest.json` | Schedule (weekdays 9 AM) | fetches unanswered questions from the last 24 hours, groups and ranks them, and posts a digest to `#assistant-knowledge-gaps` so content owners know what to add |
 
+The workflow JSON files live in `chart/files/n8n-workflows/` so the Helm chart can ship them: an init container on the n8n Deployment imports and publishes them on first start (values `n8n.workflows.*`), and creates the Slack credential from `SLACK_BOT_TOKEN` in the integrations secret when it is set.
+
 ## Import
 
 Create an API key in n8n (Settings, then *n8n API*), then:

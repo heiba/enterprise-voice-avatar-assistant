@@ -1,4 +1,5 @@
 {
+  "id": "VS4jgB2yIcuS0Hvi",
   "name": "WF7 Knowledge gap digest",
   "nodes": [
     {
@@ -74,7 +75,13 @@
         780,
         0
       ],
-      "continueOnFail": true
+      "continueOnFail": true,
+      "credentials": {
+        "slackApi": {
+          "id": "AssistantSlack01",
+          "name": "Slack account"
+        }
+      }
     }
   ],
   "connections": {

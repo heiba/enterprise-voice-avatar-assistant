@@ -82,3 +82,87 @@ http://{{ $m.name }}-predictor.{{ .root.Release.Namespace }}.svc.cluster.local:8
 {{ $m.endpoint }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Environment shared by the n8n server and the workflow-import init container: the
+same database, encryption key, public URL and service URLs. Pass the root context.
+*/}}
+{{- define "assistant.n8nEnv" -}}
+{{- $host := include "assistant.publicHost" (dict "root" . "name" "n8n" "override" .Values.n8n.publicHost) -}}
+# Runs under an OpenShift-assigned UID: keep all writable state on the volume.
+- name: N8N_USER_FOLDER
+  value: /data
+- name: HOME
+  value: /data
+- name: N8N_PORT
+  value: "5678"
+- name: N8N_PROTOCOL
+  value: https
+{{- if $host }}
+- name: N8N_HOST
+  value: {{ $host | quote }}
+- name: WEBHOOK_URL
+  value: https://{{ $host }}/
+- name: N8N_EDITOR_BASE_URL
+  value: https://{{ $host }}/
+{{- end }}
+- name: N8N_PROXY_HOPS
+  value: "1"
+- name: N8N_ENCRYPTION_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.secrets.n8n }}
+      key: N8N_ENCRYPTION_KEY
+- name: DB_TYPE
+  value: postgresdb
+- name: DB_POSTGRESDB_HOST
+  value: postgres
+- name: DB_POSTGRESDB_PORT
+  value: "5432"
+- name: DB_POSTGRESDB_SCHEMA
+  value: n8n
+- name: DB_POSTGRESDB_DATABASE
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.secrets.postgres }}
+      key: POSTGRESQL_DATABASE
+- name: DB_POSTGRESDB_USER
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.secrets.postgres }}
+      key: POSTGRESQL_USER
+- name: DB_POSTGRESDB_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.secrets.postgres }}
+      key: POSTGRESQL_PASSWORD
+- name: N8N_RUNNERS_ENABLED
+  value: "true"
+- name: N8N_BLOCK_ENV_ACCESS_IN_NODE
+  value: "false"
+- name: N8N_DIAGNOSTICS_ENABLED
+  value: "false"
+- name: N8N_TEMPLATES_ENABLED
+  value: "true"
+- name: N8N_SECURE_COOKIE
+  value: "true"
+- name: N8N_PAYLOAD_SIZE_MAX
+  value: {{ .Values.n8n.payloadSizeMaxMb | quote }}
+- name: GENERIC_TIMEZONE
+  value: {{ .Values.n8n.timezone | quote }}
+- name: TZ
+  value: {{ .Values.n8n.timezone | quote }}
+# Service URLs the exported workflows read through $env
+- name: RAG_API_URL
+  value: http://rag-api:8080
+- name: INGESTION_URL
+  value: http://ingestion:8080
+- name: S3_ENDPOINT_URL
+  value: http://minio:9000
+- name: NODE_EXTRA_CA_CERTS
+  value: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+{{- range $k, $v := .Values.n8n.extraEnv }}
+- name: {{ $k }}
+  value: {{ $v | quote }}
+{{- end }}
+{{- end -}}

@@ -34,92 +34,79 @@ spec:
       {{- include "assistant.selector" (dict "root" . "name" "n8n") | nindent 6 }}
   template:
     metadata:
+      annotations:
+        checksum/workflows: {{ (.Files.Glob "files/n8n-workflows/*.json").AsConfig | sha256sum | trunc 16 }}
       labels:
         {{- include "assistant.componentLabels" (dict "root" . "name" "n8n") | nindent 8 }}
     spec:
       enableServiceLinks: false
       terminationGracePeriodSeconds: 60
+      {{- if .Values.n8n.workflows.autoImport }}
+      # Imports the shipped workflows (and the Slack credential when a bot token is in the
+      # integrations secret) and publishes them before the server starts, so a fresh install
+      # comes up with the workflows active. Guarded by a marker on the data volume.
+      initContainers:
+        - name: import-workflows
+          image: {{ .Values.n8n.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            {{- include "assistant.securityContext" . | nindent 12 }}
+          env:
+            {{- include "assistant.n8nEnv" . | nindent 12 }}
+            - name: IMPORT_POLICY
+              value: {{ .Values.n8n.workflows.importPolicy | quote }}
+            - name: SLACK_CREDENTIAL_ID
+              value: {{ .Values.n8n.workflows.slackCredentialId | quote }}
+            - name: SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.integrations }}
+                  key: SLACK_BOT_TOKEN
+                  optional: true
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: workflows
+              mountPath: /workflows
+              readOnly: true
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -u
+              MARK=/data/.workflows-imported
+              HASH=$(cat /workflows/*.json | sha256sum | cut -c1-16)
+              case "$IMPORT_POLICY" in
+                once)     [ -f "$MARK" ] && { echo "workflows already imported (marker $(cat "$MARK")); importPolicy=once, skipping"; exit 0; } ;;
+                onChange) [ "$(cat "$MARK" 2>/dev/null)" = "$HASH" ] && { echo "workflows unchanged ($HASH), skipping"; exit 0; } ;;
+                always)   ;;
+                *)        echo "unknown importPolicy $IMPORT_POLICY"; exit 1 ;;
+              esac
+              for i in $(seq 1 60); do
+                node -e "require('net').connect($DB_POSTGRESDB_PORT,'$DB_POSTGRESDB_HOST').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))" && break
+                echo "waiting for postgres"; sleep 5
+              done
+              if [ -n "${SLACK_BOT_TOKEN:-}" ]; then
+                node -e 'const fs=require("fs");fs.writeFileSync("/tmp/credentials.json",JSON.stringify([{id:process.env.SLACK_CREDENTIAL_ID,name:"Slack account",type:"slackApi",data:{accessToken:process.env.SLACK_BOT_TOKEN}}]))'
+                n8n import:credentials --input=/tmp/credentials.json && echo "Slack credential imported as $SLACK_CREDENTIAL_ID"
+                rm -f /tmp/credentials.json
+              else
+                echo "no SLACK_BOT_TOKEN in the integrations secret; Slack nodes stay unbound until a credential is attached"
+              fi
+              n8n import:workflow --separate --input=/workflows || exit 1
+              for f in /workflows/*.json; do
+                id=$(node -e "console.log(require('$f').id)")
+                name=$(node -e "console.log(require('$f').name)")
+                if n8n publish:workflow --id="$id" >/tmp/publish.log 2>&1; then echo "published  $name"; else echo "not published $name: $(tail -1 /tmp/publish.log | cut -c1-160)"; fi
+              done
+              echo "$HASH" > "$MARK"
+      {{- end }}
       containers:
         - name: n8n
           image: {{ .Values.n8n.image }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           env:
-            # Runs under an OpenShift-assigned UID: keep all writable state on the volume.
-            - name: N8N_USER_FOLDER
-              value: /data
-            - name: HOME
-              value: /data
-            - name: N8N_PORT
-              value: "5678"
-            - name: N8N_PROTOCOL
-              value: https
-            {{- if $host }}
-            - name: N8N_HOST
-              value: {{ $host | quote }}
-            - name: WEBHOOK_URL
-              value: https://{{ $host }}/
-            - name: N8N_EDITOR_BASE_URL
-              value: https://{{ $host }}/
-            {{- end }}
-            - name: N8N_PROXY_HOPS
-              value: "1"
-            - name: N8N_ENCRYPTION_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.secrets.n8n }}
-                  key: N8N_ENCRYPTION_KEY
-            - name: DB_TYPE
-              value: postgresdb
-            - name: DB_POSTGRESDB_HOST
-              value: postgres
-            - name: DB_POSTGRESDB_PORT
-              value: "5432"
-            - name: DB_POSTGRESDB_SCHEMA
-              value: n8n
-            - name: DB_POSTGRESDB_DATABASE
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.secrets.postgres }}
-                  key: POSTGRESQL_DATABASE
-            - name: DB_POSTGRESDB_USER
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.secrets.postgres }}
-                  key: POSTGRESQL_USER
-            - name: DB_POSTGRESDB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.secrets.postgres }}
-                  key: POSTGRESQL_PASSWORD
-            - name: N8N_RUNNERS_ENABLED
-              value: "true"
-            - name: N8N_BLOCK_ENV_ACCESS_IN_NODE
-              value: "false"
-            - name: N8N_DIAGNOSTICS_ENABLED
-              value: "false"
-            - name: N8N_TEMPLATES_ENABLED
-              value: "true"
-            - name: N8N_SECURE_COOKIE
-              value: "true"
-            - name: N8N_PAYLOAD_SIZE_MAX
-              value: {{ .Values.n8n.payloadSizeMaxMb | quote }}
-            - name: GENERIC_TIMEZONE
-              value: {{ .Values.n8n.timezone | quote }}
-            - name: TZ
-              value: {{ .Values.n8n.timezone | quote }}
-            # Service URLs the exported workflows read through $env
-            - name: RAG_API_URL
-              value: http://rag-api:8080
-            - name: INGESTION_URL
-              value: http://ingestion:8080
-            - name: S3_ENDPOINT_URL
-              value: http://minio:9000
-            - name: NODE_EXTRA_CA_CERTS
-              value: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
-            {{- range $k, $v := .Values.n8n.extraEnv }}
-            - name: {{ $k }}
-              value: {{ $v | quote }}
-            {{- end }}
+            {{- include "assistant.n8nEnv" . | nindent 12 }}
           ports:
             - name: http
               containerPort: 5678
@@ -152,6 +139,11 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: n8n-data
+        {{- if .Values.n8n.workflows.autoImport }}
+        - name: workflows
+          configMap:
+            name: n8n-workflows
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service

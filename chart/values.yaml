@@ -111,6 +111,15 @@ n8n:
   timezone: Europe/Amsterdam
   # Extra environment variables passed to n8n (string values).
   extraEnv: {}
+  workflows:
+    # Import the workflows in chart/files/n8n-workflows and publish them when n8n starts.
+    autoImport: true
+    # once: first start only (marker on the data volume); onChange: whenever the shipped
+    # files change (overwrites edits made in the editor); always: every start.
+    importPolicy: once
+    # Credential id the Slack nodes reference; created from SLACK_BOT_TOKEN in the
+    # integrations secret when present. Google Docs (WF5) needs a browser sign-in in n8n.
+    slackCredentialId: AssistantSlack01
   resources:
     requests:
       cpu: 250m

@@ -232,7 +232,7 @@ helm install assistant chart --namespace ${PROJECT} \
 
 The two options mix per model, for example a MaaS LLM with Whisper deployed locally. For longer configurations copy `chart/values.yaml`, edit it, and pass it with `-f my-values.yaml`. Guardrails, the avatar provider, and the integrations are configured through the same file.
 
-5. Import the n8n workflows. Open the n8n Route, sign in, import each JSON file from `n8n/workflows/`, and attach your Slack and Google credentials to the corresponding nodes.
+5. The n8n workflows are imported and published automatically when n8n starts (the `n8n.workflows` values control this). If `SLACK_BOT_TOKEN` was in the integrations secret at install time, the Slack nodes are wired too; otherwise open the n8n Route, add a Slack credential, and attach it. Google Docs (transcript archival) always needs a one-time sign-in in n8n. To update workflows later, edit `chart/files/n8n-workflows/` and run `scripts/import-workflows.sh`.
 
 ```bash
 echo https://$(oc get route/n8n -n ${PROJECT} --template='{{.spec.host}}')
@@ -348,7 +348,7 @@ Target layout. Directories marked *planned* are not in the repository yet.
 │   └── create-secrets.sh         # Creates the Secrets the chart expects
 ├── docs/
 │   └── images/                   # Architecture diagram and screenshots
-├── n8n/workflows/                # Exported workflow JSON, import script in scripts/
+├── n8n/                          # Workflow docs and the Slack app manifest (workflow JSON lives in chart/files/n8n-workflows/)
 ├── frontend/                     # React chat UI with citations (voice and avatar to follow)
 ├── services/
 │   ├── rag-api/                  # retrieval, memory, guardrails, classification, tickets (FastAPI)

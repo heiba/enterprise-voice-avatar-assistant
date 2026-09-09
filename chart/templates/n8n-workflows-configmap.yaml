@@ -1,0 +1,11 @@
+{{- if and .Values.n8n.enabled .Values.n8n.workflows.autoImport }}
+# The n8n workflows shipped with the chart, imported by the n8n init container.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: n8n-workflows
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "n8n") | nindent 4 }}
+data:
+  {{- (.Files.Glob "files/n8n-workflows/*.json").AsConfig | nindent 2 }}
+{{- end }}

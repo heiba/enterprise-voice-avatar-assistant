@@ -1,4 +1,5 @@
 {
+  "id": "5HWUrT4tIZOU7FYv",
   "name": "WF6 SLA escalation",
   "nodes": [
     {
@@ -103,7 +104,13 @@
         1300,
         -200
       ],
-      "continueOnFail": true
+      "continueOnFail": true,
+      "credentials": {
+        "slackApi": {
+          "id": "AssistantSlack01",
+          "name": "Slack account"
+        }
+      }
     },
     {
       "parameters": {
@@ -139,7 +146,13 @@
         1040,
         200
       ],
-      "continueOnFail": true
+      "continueOnFail": true,
+      "credentials": {
+        "slackApi": {
+          "id": "AssistantSlack01",
+          "name": "Slack account"
+        }
+      }
     }
   ],
   "connections": {

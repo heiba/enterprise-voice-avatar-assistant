@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Imports (creates or updates) every workflow in n8n/workflows through the n8n
+# Imports (creates or updates) every workflow in chart/files/n8n-workflows through the n8n
 # public API and activates it. Matching is by workflow name, so re-running the
 # script updates the workflows in place.
 #
@@ -12,7 +12,7 @@
 set -euo pipefail
 : "${N8N_URL:?set N8N_URL to the n8n base URL}"
 : "${N8N_API_KEY:?create an API key in n8n under Settings > n8n API and export N8N_API_KEY}"
-DIR="${1:-$(dirname "$0")/../n8n/workflows}"
+DIR="${1:-$(dirname "$0")/../chart/files/n8n-workflows}"
 
 python3 - "$N8N_URL" "$N8N_API_KEY" "$DIR" <<'PY'
 import glob, json, os, sys, urllib.error, urllib.request

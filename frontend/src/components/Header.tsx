@@ -1,3 +1,5 @@
+import { UserBadge } from "./UserBadge";
+
 interface Props {
   userName: string;
   onUserName: (name: string) => void;
@@ -27,15 +29,7 @@ export function Header({ userName, onUserName, onReset, onArchive, canArchive, s
         </a>
       </div>
       <div className="header-controls">
-        <label>
-          Your name
-          <input
-            value={userName}
-            onChange={(e) => onUserName(e.target.value)}
-            placeholder="used for memory"
-            aria-label="Your name, used to remember facts about you"
-          />
-        </label>
+        <UserBadge name={userName} onChange={onUserName} />
         <button
           type="button"
           className="secondary"

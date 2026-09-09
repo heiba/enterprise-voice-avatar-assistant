@@ -46,8 +46,20 @@ h1, h2 { margin: 0; }
 .powered:hover { border-color: #ff6d92; background: #ea4b7133; }
 @media (max-width: 900px) { .powered { display: none; } }
 .header-controls { display: flex; align-items: center; gap: 12px; }
-.header-controls label { display: flex; flex-direction: column; font-size: 0.75rem; color: var(--muted); }
-.header-controls input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; width: 160px; background: var(--surface-2); color: var(--text); }
+.user-badge { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 6px 0 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); margin-right: 4px; }
+.user-badge:hover { border-color: var(--border-strong); }
+.user-badge.editing { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
+.user-avatar { width: 30px; height: 30px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent); font-weight: 700; font-size: 0.78rem; letter-spacing: 0.02em; }
+.user-avatar.guest { background: var(--surface-3); border-color: var(--border-strong); color: var(--muted); }
+.user-badge .who { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.user-badge .who small { font-size: 0.66rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.user-badge .who strong { font-size: 0.92rem; font-weight: 600; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-badge input { width: 150px; padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 6px; font-size: 0.92rem; background: var(--bg); color: var(--text); }
+.user-badge input:focus-visible { outline: none; border-color: var(--accent); }
+.user-badge button.icon { width: 28px; height: 28px; flex: none; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid transparent; background: transparent; color: var(--muted); }
+.user-badge button.icon:hover { background: var(--surface-3); border-color: var(--border-strong); color: var(--text); }
+.user-badge button.icon.save { color: var(--success); }
+.user-badge button.icon.save:hover { background: var(--success-soft); border-color: var(--success); }
 button.secondary { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; }
 button.secondary:hover:not(:disabled) { background: var(--surface-3); border-color: var(--border-strong); }
 
@@ -82,7 +94,7 @@ button.cite:hover { border-color: var(--accent); }
 
 .composer { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
 .composer textarea { flex: 1; resize: none; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; background: var(--surface-2); color: var(--text); }
-.composer textarea::placeholder, .header-controls input::placeholder { color: var(--muted); }
+.composer textarea::placeholder, .user-badge input::placeholder { color: var(--muted); }
 .composer button { background: var(--accent-strong); color: #fff; border: 0; border-radius: 8px; padding: 0 18px; font-weight: 600; }
 .composer button:hover:not(:disabled) { filter: brightness(1.15); }
 

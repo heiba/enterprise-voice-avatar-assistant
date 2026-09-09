@@ -2,7 +2,7 @@
 
 Ground a voice-enabled, avatar-fronted assistant in your company documents with RAG, n8n workflows, and models served on Red Hat® OpenShift® AI.
 
-> **Status: work in progress.** This README describes the target design. Components are being added incrementally; see [Repository structure](#repository-structure) for what exists today.
+> **Status: complete.** Everything described here is deployed and demonstrated; [docs/deployment.md](docs/deployment.md) has the installation detail and [docs/development.md](docs/development.md) the layout of the repository.
 
 ## Table of Contents
 
@@ -21,7 +21,6 @@ Ground a voice-enabled, avatar-fronted assistant in your company documents with 
   - [Validating the deployment](#validating-the-deployment)
   - [Delete](#delete)
 - [Demo walkthrough](#demo-walkthrough)
-- [Repository structure](#repository-structure)
 - [References](#references)
 - [Technical details](#technical-details)
   - [How it works](#how-it-works)
@@ -316,50 +315,6 @@ The demo follows one storyline, from deployment to portability. Each step builds
 10. **Swap the avatar provider or the LLM endpoint** with a values change and redeploy, demonstrating portability and data sovereignty.
 
 A presenter script with timings, exact questions and expected answers is in [docs/demo-script.md](docs/demo-script.md).
-
-## Repository structure
-
-```
-.
-├── README.md
-├── LICENSE                       # MIT
-├── CONTRIBUTING.md               # How to propose changes and the checks to run
-├── chart/                        # Helm chart (template layout): datastores, n8n, LiveKit,
-│   ├── README.md                 #   chart reference: what it creates, every value with its default
-│   ├── Chart.yaml                #   application services, and model InferenceServices
-│   ├── values.yaml               # Default configuration: models, images, sizing
-│   ├── values-demo-cluster.yaml  # Example per-cluster overrides, used by Argo CD
-│   ├── files/n8n-workflows/      # The n8n workflows, imported by n8n on first start
-│   └── templates/                # Resources, values validation, and the Helm test pod
-├── deploy/
-│   ├── argocd/                   # Argo CD AppProject and Application (optional GitOps path)
-│   └── bootstrap/                # Admin-only operator install for bare clusters (optional)
-├── scripts/
-│   ├── deploy.sh                 # One-command install: secrets, chart, wait, URLs
-│   ├── check-prereqs.sh          # Verifies cluster prerequisites and permissions
-│   ├── create-secrets.sh         # Creates the Secrets the chart expects
-│   ├── test-services.sh          # Runs the connectivity test pod (also for Argo CD installs)
-│   ├── demo-preflight.sh         # Models, Argo CD status, test pod and n8n webhooks before a demo
-│   ├── check-index.sh            # Indexed documents, duplicates, stale-text search
-│   ├── n8n-executions.sh         # Recent n8n executions with node errors (needs an API key)
-│   ├── cluster-versions.sh       # Versions behind the tested-versions table
-│   ├── import-workflows.sh       # Updates the n8n workflows through the public API
-│   └── load-sample-docs.sh       # Uploads the sample documents into MinIO
-├── docs/
-│   ├── deployment.md             # Manual Helm steps, Argo CD, third-party keys, generated secrets
-│   ├── development.md            # Running the services locally, tests, images, documents, workflows
-│   ├── demo-script.md            # 15-minute presenter script with expected answers
-│   ├── troubleshooting.md        # Symptoms, causes, checks and fixes from the demo cluster
-│   └── images/                   # Architecture diagram and screenshots
-├── n8n/                          # Workflow docs and the Slack app manifest (workflow JSON lives in chart/files/n8n-workflows/)
-├── frontend/                     # React chat UI: citations, voice, avatar video
-├── services/
-│   ├── rag-api/                  # retrieval, memory, guardrails, classification, tickets (FastAPI)
-│   ├── ingestion/                # Docling parsing, chunking, embeddings, Qdrant upsert (FastAPI)
-│   └── voice-agent/              # LiveKit Agents worker (Whisper, RAG API, Kokoro, avatar providers)
-├── data/sample-docs/             # Synthetic Example Corp documents (Markdown sources in src/, rendered DOCX and PDF)
-└── .github/workflows/            # CI: helm lint and tests; image builds published to quay.io/rh-ai-quickstart
-```
 
 ## References
 

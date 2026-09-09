@@ -407,7 +407,7 @@ Everything is a Helm value: models (`deploy` per model, or an `endpoint`), guard
 
 - **Title:** Deploy an enterprise voice and avatar assistant on OpenShift AI
 - **Description:** Ground a voice-enabled, avatar-fronted assistant in your company documents with RAG, n8n workflows, and models served on Red Hat OpenShift AI.
-- **Industry:** Cross-industry
+- **Industry:** Media and IT services
 - **Product:** Red Hat OpenShift AI
 - **Use case:** Productivity, automation
 - **Partner:** n8n

@@ -41,6 +41,10 @@ h1, h2 { margin: 0; }
 .brand-mark { width: 14px; height: 36px; background: var(--accent-strong); border-radius: 3px; }
 .brand h1 { font-size: 1.15rem; }
 .brand p { margin: 2px 0 0; color: var(--muted); font-size: 0.85rem; }
+.powered { display: inline-flex; align-items: center; gap: 6px; margin-left: 14px; padding: 6px 12px; border-radius: 999px; border: 1px solid #ea4b7180; background: #ea4b711f; color: var(--text); font-size: 0.85rem; text-decoration: none; white-space: nowrap; }
+.powered strong { color: #ff6d92; }
+.powered:hover { border-color: #ff6d92; background: #ea4b7133; }
+@media (max-width: 900px) { .powered { display: none; } }
 .header-controls { display: flex; align-items: center; gap: 12px; }
 .header-controls label { display: flex; flex-direction: column; font-size: 0.75rem; color: var(--muted); }
 .header-controls input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; width: 160px; background: var(--surface-2); color: var(--text); }

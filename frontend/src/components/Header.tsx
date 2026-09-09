@@ -16,6 +16,15 @@ export function Header({ userName, onUserName, onReset, onArchive, canArchive, s
           <h1>Enterprise Assistant</h1>
           <p>Answers from your company documents, on Red Hat OpenShift AI</p>
         </div>
+        <a
+          className="powered"
+          href="https://n8n.io"
+          target="_blank"
+          rel="noreferrer"
+          title="Ingestion, classification, approvals and archival run as n8n workflows"
+        >
+          <span aria-hidden="true">⚡</span> Workflows powered by <strong>n8n</strong>
+        </a>
       </div>
       <div className="header-controls">
         <label>

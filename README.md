@@ -270,7 +270,7 @@ helm install assistant chart --namespace ${PROJECT} \
   --set models.embeddings.servedModelName=EMBEDDINGS_MODEL_NAME
 ```
 
-The two options mix per model, for example a MaaS LLM with Whisper deployed locally. For longer configurations copy `chart/values.yaml`, edit it, and pass it with `-f my-values.yaml`. Guardrails, the avatar provider, and the integrations are configured through the same file.
+The two options mix per model, for example a MaaS LLM with Whisper deployed locally. For longer configurations copy `chart/values.yaml`, edit it, and pass it with `-f my-values.yaml`. Guardrails, the avatar provider, and the integrations are configured through the same file. Every value with its default and meaning is listed in [chart/README.md](chart/README.md).
 
 5. The n8n workflows are imported and published automatically when n8n starts (the `n8n.workflows` values control this). If `SLACK_BOT_TOKEN` was in the integrations secret at install time, the Slack nodes are wired too; otherwise open the n8n Route, add a Slack credential, and attach it. Google Docs (transcript archival) always needs a one-time sign-in in n8n. To update workflows later, edit `chart/files/n8n-workflows/` and run `scripts/import-workflows.sh`.
 
@@ -403,6 +403,7 @@ A presenter script with timings, exact questions and expected answers is in [doc
 ├── README.md
 ├── LICENSE
 ├── chart/                        # Helm chart (template layout): datastores, n8n, LiveKit,
+│   ├── README.md                 #   chart reference: what it creates, every value with its default
 │   ├── Chart.yaml                #   application services, and model InferenceServices
 │   ├── values.yaml               # Default configuration: models, images, sizing
 │   ├── values-demo-cluster.yaml  # Example per-cluster overrides, used by Argo CD

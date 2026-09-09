@@ -30,16 +30,11 @@ const STATE_LABEL: Record<string, string> = {
   disconnected: "Assistant not connected",
 };
 
-const FACE_KEY = "assistant.face";
+const FACE_KEY = "assistant.face"; // the chosen face is remembered in this browser
+const MAX_FACES = 4;
 
 function slug(name: string) {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
-function voiceLabel(face: VoiceFace) {
-  if (face.gender === "female") return "female voice";
-  if (face.gender === "male") return "male voice";
-  return `voice ${face.voice}`;
 }
 
 function readStoredFace(): string {
@@ -67,8 +62,10 @@ export function VoicePanel({ sessionId, userName, onAssistantTurn, onActiveChang
       .voiceFaces()
       .then((result) => {
         if (cancelled) return;
-        setFaces(result.faces);
-        setFaceId((current) => (result.faces.some((f) => f.id === current) ? current : (result.default ?? "")));
+        const offered = result.faces.slice(0, MAX_FACES);
+        setFaces(offered);
+        // keep the remembered face when it is still offered; otherwise fall back to the default
+        setFaceId((current) => (offered.some((f) => f.id === current) ? current : (result.default ?? "")));
       })
       .catch(() => undefined);
     return () => {
@@ -121,13 +118,10 @@ export function VoicePanel({ sessionId, userName, onAssistantTurn, onActiveChang
                 aria-checked={f.id === faceId}
                 className={`face-option${f.id === faceId ? " selected" : ""}`}
                 onClick={() => setFaceId(f.id)}
-                title={`${f.name}: ${voiceLabel(f)} (${f.voice})`}
+                title={f.name}
               >
                 <FaceThumb face={f} />
-                <span className="face-text">
-                  <span className="face-name">{f.name}</span>
-                  <span className="face-voice">{voiceLabel(f)}</span>
-                </span>
+                <span className="face-name">{f.name}</span>
               </button>
             ))}
           </div>

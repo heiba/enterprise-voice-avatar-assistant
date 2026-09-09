@@ -23,6 +23,7 @@ log = logging.getLogger("rag.faces")
 
 TAVUS_API_URL = "https://tavusapi.com/v2"
 GENDERS = ("female", "male")
+MAX_FACES = 4  # the UI offers at most four faces
 FACE_ATTRIBUTE = "avatar_face"  # LiveKit participant attribute carrying the chosen face
 CACHE_SECONDS = 3600.0
 RETRY_SECONDS = 300.0
@@ -67,6 +68,9 @@ def parse(raw: str) -> list[Face]:
                 thumbnail_url=_text(item.get("thumbnail_url")) or None,
             )
         )
+    if len(faces) > MAX_FACES:
+        log.warning("AVATAR_FACES lists %d faces; only the first %d are offered", len(faces), MAX_FACES)
+        faces = faces[:MAX_FACES]
     return faces
 
 

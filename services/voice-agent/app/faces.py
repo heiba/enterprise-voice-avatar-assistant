@@ -17,6 +17,7 @@ from .config import settings
 log = logging.getLogger("voice-agent.faces")
 
 GENDERS = ("female", "male")
+MAX_FACES = 4  # the same cap the RAG API applies, so both sides offer the same list
 FACE_ATTRIBUTE = "avatar_face"
 
 
@@ -57,6 +58,9 @@ def parse(raw: str) -> list[Face]:
                 voice=_text(item.get("voice")) or None,
             )
         )
+    if len(faces) > MAX_FACES:
+        log.warning("AVATAR_FACES lists %d faces; only the first %d are offered", len(faces), MAX_FACES)
+        faces = faces[:MAX_FACES]
     return faces
 
 

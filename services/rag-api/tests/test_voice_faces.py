@@ -44,6 +44,15 @@ def test_catalog_and_voice_selection(monkeypatch):
     assert faces.resolve("nope") is None
 
 
+def test_catalog_is_capped_at_four_faces(monkeypatch):
+    many = json.dumps([{"id": f"r{n}", "name": f"Face {n}"} for n in range(6)])
+    _tavus(monkeypatch, catalog=many)
+    assert [f.id for f in faces.catalog()] == ["r0", "r1", "r2", "r3"]
+    with TestClient(app) as client:
+        assert len(client.get("/v1/voice/faces").json()["faces"]) == 4
+        assert client.get("/v1/voice/token", params={"session_id": "s", "face_id": "r5"}).status_code == 400
+
+
 def test_catalog_falls_back_to_the_single_face(monkeypatch):
     _tavus(monkeypatch, catalog="[]")
     monkeypatch.setattr(settings, "tavus_face_id", "rsingle")

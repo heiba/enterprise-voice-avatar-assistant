@@ -121,9 +121,7 @@ button.cite:hover { border-color: var(--accent); }
 .face-option.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .face-thumb { width: 34px; height: 34px; flex: none; border-radius: 50%; object-fit: cover; background: var(--surface-3); }
 .face-thumb-initial { display: grid; place-items: center; font-weight: 700; font-size: 0.85rem; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-line); }
-.face-text { display: flex; flex-direction: column; line-height: 1.15; }
 .face-name { font-size: 0.85rem; font-weight: 600; }
-.face-voice { font-size: 0.7rem; color: var(--muted); }
 .voice-tag { background: var(--user); color: var(--text); }
 .ticket-tag { background: var(--accent-soft); color: var(--text); }
 .notice-tag { background: var(--success-soft); color: var(--success); }

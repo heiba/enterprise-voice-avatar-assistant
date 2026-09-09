@@ -23,9 +23,6 @@ voiceAgent:
     - id: r67d1c9cac37
       name: Jackie
       gender: female
-    - id: rfe12d8b9597
-      name: Nathan
-      gender: male
     - id: re6220ec0195
       name: Raj
       gender: male

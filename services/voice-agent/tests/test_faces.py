@@ -39,6 +39,12 @@ def test_select_prefers_the_requested_catalog_face(monkeypatch):
     assert faces.select("rany").id == "rany"  # no catalog: the browser's id is trusted
 
 
+def test_catalog_is_capped_at_four_faces(monkeypatch):
+    _voices(monkeypatch, catalog=json.dumps([{"id": f"r{n}"} for n in range(6)]))
+    assert [f.id for f in faces.catalog()] == ["r0", "r1", "r2", "r3"]
+    assert faces.select("r5").id == "r0"  # beyond the cap counts as unknown
+
+
 def test_requested_face_reads_the_participant_attribute():
     assert faces.requested_face(SimpleNamespace(attributes={"avatar_face": " r1 "})) == "r1"
     assert faces.requested_face(SimpleNamespace(attributes={})) is None

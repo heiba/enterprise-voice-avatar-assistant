@@ -34,6 +34,8 @@ runAsNonRoot: true
 capabilities:
   drop:
     - ALL
+seccompProfile:
+  type: RuntimeDefault
 {{- end -}}
 
 {{/*

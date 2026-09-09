@@ -94,11 +94,23 @@ spec:
                 echo "no SLACK_BOT_TOKEN in the integrations secret; Slack nodes stay unbound until a credential is attached"
               fi
               n8n import:workflow --separate --input=/workflows || exit 1
+              # Publish only workflows whose credential types exist; the CLI would publish
+              # regardless, and the editor then fails to save them until a credential is attached.
+              n8n export:credentials --all --output=/tmp/creds.json >/dev/null 2>&1 || echo "[]" > /tmp/creds.json
               for f in /workflows/*.json; do
                 id=$(node -e "console.log(require('$f').id)")
                 name=$(node -e "console.log(require('$f').name)")
+                missing=$(node -e '
+                  const wf = require(process.argv[1]);
+                  const have = new Set(require("/tmp/creds.json").map(c => c.type));
+                  const byNode = { "n8n-nodes-base.slack": "slackApi", "n8n-nodes-base.googleDocs": "googleDocsOAuth2Api", "n8n-nodes-base.googleDrive": "googleDriveOAuth2Api", "n8n-nodes-base.googleSheets": "googleSheetsOAuth2Api" };
+                  const need = new Set();
+                  for (const n of wf.nodes) { for (const t of Object.keys(n.credentials || {})) need.add(t); if (byNode[n.type]) need.add(byNode[n.type]); }
+                  console.log([...need].filter(t => !have.has(t)).join(","));' "$f")
+                if [ -n "$missing" ]; then echo "not published $name: add a credential of type $missing in n8n, then publish it"; continue; fi
                 if n8n publish:workflow --id="$id" >/tmp/publish.log 2>&1; then echo "published  $name"; else echo "not published $name: $(tail -1 /tmp/publish.log | cut -c1-160)"; fi
               done
+              rm -f /tmp/creds.json
               echo "$HASH" > "$MARK"
       {{- end }}
       containers:

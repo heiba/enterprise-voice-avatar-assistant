@@ -180,6 +180,14 @@ Before deploying, ensure you have:
 
 ### Installation
 
+**Quick path.** One command does steps 2 to 5 below: it detects the current project and the cluster apps domain, creates the secrets, installs the chart, waits for pods and models, and prints the URLs. Add `MODELS=maas` to be prompted for remote model endpoints, `RUN_TESTS=1` to finish with `helm test`, and pass any extra Helm arguments such as `-f my-values.yaml`.
+
+```bash
+PROJECT=${PROJECT} scripts/deploy.sh
+```
+
+The manual steps follow for when you want to see or change each one.
+
 1. Clone the repository:
 
 ```bash
@@ -252,16 +260,10 @@ See [deploy/argocd/README.md](deploy/argocd/README.md) for per-cluster values fi
 
 #### Testing model access before deploying
 
-If you are bringing your own LLM endpoint (Option A), verify it is reachable from the cluster before installing:
+The chart refuses to install when a model is set to `deploy: false` without an endpoint and a served model name, and prints what to set. After the install, `helm test` checks every configured model from inside the cluster (model lists, an embeddings call, and an LLM chat completion) plus the datastores and services:
 
 ```bash
-oc run test-model-access --rm -it --restart=Never \
-  --image=registry.access.redhat.com/ubi9/ubi-minimal:latest \
-  -- /bin/sh -c 'curl -sf --max-time 10 \
-    -H "Authorization: Bearer LLM_API_KEY" \
-    -H "Content-Type: application/json" \
-    -d "{\"model\": \"LLM_MODEL_NAME\", \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in one word.\"}], \"max_tokens\": 10}" \
-    "https://LLM_ENDPOINT/v1/chat/completions" && echo "" && echo "SUCCESS" || echo "FAILED"'
+helm test assistant -n ${PROJECT} --logs
 ```
 
 ### Validating the deployment

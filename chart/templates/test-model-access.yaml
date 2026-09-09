@@ -29,6 +29,17 @@ spec:
           value: {{ include "assistant.modelEndpoint" (dict "root" . "key" "stt") | quote }}
         - name: EMBEDDINGS_BASE_URL
           value: {{ include "assistant.modelEndpoint" (dict "root" . "key" "embeddings") | quote }}
+        - name: EMBEDDINGS_MODEL
+          value: {{ .Values.models.embeddings.servedModelName | quote }}
+        - name: EMBEDDINGS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.models }}
+              key: EMBEDDINGS_API_KEY
+        {{- if ne .Values.models.guardrails.provider "none" }}
+        - name: GUARDRAILS_BASE_URL
+          value: {{ include "assistant.modelEndpoint" (dict "root" . "key" "guardrails") | quote }}
+        {{- end }}
         - name: CA
           value: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
       command:
@@ -43,6 +54,11 @@ spec:
           }
           [ -n "$STT_BASE_URL" ] && check stt-models "$STT_BASE_URL/models"
           [ -n "$EMBEDDINGS_BASE_URL" ] && check embeddings-models "$EMBEDDINGS_BASE_URL/models"
+          [ -n "${GUARDRAILS_BASE_URL:-}" ] && check guardrails-models "$GUARDRAILS_BASE_URL/models"
+          if [ -n "$EMBEDDINGS_BASE_URL" ]; then
+            if curl -sf --max-time 60 --cacert "$CA" -H "Authorization: Bearer $EMBEDDINGS_API_KEY" -H "Content-Type: application/json" \
+              -d "{\"model\": \"$EMBEDDINGS_MODEL\", \"input\": \"hello\"}" "$EMBEDDINGS_BASE_URL/embeddings" >/dev/null; then echo "OK      embeddings ($EMBEDDINGS_MODEL)"; else echo "FAILED  embeddings ($EMBEDDINGS_BASE_URL, model $EMBEDDINGS_MODEL)"; failed=1; fi
+          fi
           {{- if .Values.qdrant.enabled }}
           check qdrant http://qdrant:6333/readyz
           {{- end }}

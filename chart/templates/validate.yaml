@@ -1,0 +1,19 @@
+{{- /*
+Fails the install early with an actionable message instead of producing pods that
+cannot reach a model. Renders nothing.
+*/ -}}
+{{- range $key := list "llm" "stt" "embeddings" "tts" }}
+{{- $m := index $.Values.models $key }}
+{{- if not $m.deploy }}
+{{- if not $m.endpoint }}
+{{- fail (printf "models.%s.deploy is false but models.%s.endpoint is empty. Set the OpenAI-compatible base URL including /v1, for example: --set models.%s.endpoint=https://host/v1" $key $key $key) }}
+{{- end }}
+{{- if not $m.servedModelName }}
+{{- fail (printf "models.%s.servedModelName is empty. Set it to the model name the endpoint serves (GET <endpoint>/models lists them): --set models.%s.servedModelName=<name>" $key $key) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- $g := .Values.models.guardrails }}
+{{- if and (ne $g.provider "none") (ne $g.provider "trustyai") (not $g.deploy) (not $g.endpoint) }}
+{{- fail (printf "models.guardrails.provider is %s with deploy false but models.guardrails.endpoint is empty; set the endpoint or deploy the model" $g.provider) }}
+{{- end }}

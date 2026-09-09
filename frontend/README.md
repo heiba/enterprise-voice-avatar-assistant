@@ -3,8 +3,8 @@
 React chat interface for the assistant: a chat panel with clickable citation
 markers, a sources panel showing the retrieved passages (cited ones first), a
 persistent AI disclaimer, and a status strip that reports the active models
-from the RAG API. Voice mode is present but disabled until the voice agent and
-the LiveKit TURN certificate are in place.
+from the RAG API. Voice mode connects to the LiveKit room and shows the avatar video when a
+provider is configured; the header has New conversation and Archive transcript.
 
 Calls go to `/api/...`, which nginx proxies to the RAG API inside the cluster
 (`RAG_API_UPSTREAM`, default `rag-api:8080`). The session id is kept in

@@ -27,17 +27,23 @@ Ground a voice-enabled, avatar-fronted assistant in your company documents with 
 
 ## Overview
 
-Employees lose time hunting through policies, contracts, and internal procedures, and service desks spend hours on requests that follow a predictable intake, approval, and fulfillment pattern. This quickstart deploys an enterprise virtual assistant that answers questions from your own documents with citations, talks back through a lip-synced avatar, remembers the conversation, classifies incoming documents, and turns spoken requests into tracked tickets with Slack approval.
-
-It is built for platform and AI teams who want a sovereign, self-hosted assistant. Every model (LLM, speech-to-text, text-to-speech, embeddings) runs on Red Hat OpenShift AI, data stays in PostgreSQL and Qdrant on your cluster, and the orchestration lives in n8n workflows you can inspect and change. After deploying, you can upload documents, ask questions by text or voice, drop in an invoice for field extraction, and file a service request end to end.
+Employees lose time hunting through policies and procedures, and service desks spend hours on requests that follow the same intake, approval and fulfillment pattern. This quickstart deploys a virtual assistant that answers questions from your own documents with citations, speaks through a lip-synced avatar, and turns spoken requests into tracked tickets approved in Slack. It is for platform and AI teams that need a sovereign assistant: the models, the data and the workflows all run on Red Hat OpenShift AI in your own cluster. After deploying, you upload documents, ask questions by text or voice, drop in an invoice for field extraction, and file a service request end to end.
 
 ## Detailed description
 
-Knowledge in most organizations is scattered across PDFs, Word documents, wikis, and ticketing systems. Chat assistants built on public APIs can answer questions, but they send sensitive content off-platform, cannot show where an answer came from, and rarely close the loop on the actions that follow a question, such as approving a request or updating a ticket. Voice and avatar interfaces make assistants approachable for frontline staff, kiosks, and accessibility use cases, but they add real-time speech pipelines that are hard to run privately.
+Knowledge in most organizations is scattered across PDFs, Word documents, wikis and ticketing systems. Chat assistants built on public APIs can answer questions, but they send sensitive content off-platform, cannot show where an answer came from, and rarely close the loop on what follows a question, such as approving a request or updating a ticket. Voice and avatar interfaces make assistants approachable for frontline staff, kiosks and accessibility use cases, but real-time speech is hard to run privately.
 
-This quickstart addresses that gap with a complete, self-hosted stack. Documents dropped into object storage are parsed with Docling, chunked, embedded, and indexed in Qdrant. A RAG service retrieves relevant passages, applies input and output guardrails, and asks an LLM served on OpenShift AI for a grounded answer with source and page citations. Conversation history and long-term memory are persisted in PostgreSQL so follow-up questions work across text and voice. A LiveKit-based voice agent streams microphone audio through Whisper, the same RAG service, and a TTS model, and drives a pluggable avatar provider for lip-synced video. Users can interrupt the avatar mid-sentence.
+This quickstart shows how Example Corp, a fictional company, runs an assistant that answers from its own policy and procedure documents with source citations, remembers the conversation across text and voice, and lets people interrupt the avatar mid-sentence. Incoming documents such as invoices and contracts are classified and their fields extracted before being routed to Slack or a downstream system. Service requests made by chat or voice are classified, sent to Slack for approval, fulfilled and tracked, and the assistant tells the requester the outcome. Transcripts are archived to Google Docs and re-indexed, so the assistant can answer questions about earlier conversations. Typical scenarios are IT and HR help desks, procurement intake, and front-desk or kiosk assistants in regulated industries where data must not leave the organization.
 
-Beyond question answering, the assistant handles two workflow patterns common to every enterprise. Incoming documents such as invoices and contracts are classified and their fields extracted to JSON, then routed to Slack or downstream systems. Service requests submitted by chat, voice, or form are classified, sent to Slack for approval, fulfilled, and tracked as tickets in PostgreSQL, with the avatar confirming the outcome. Transcripts are archived to Google Docs and re-ingested so the assistant learns from its own conversations. Typical scenarios include IT and HR help desks, procurement intake, and front-desk or kiosk assistants in regulated industries where data must not leave the organization.
+After deployment you can:
+
+- Upload documents and watch them parsed, indexed and confirmed in Slack
+- Ask questions by text or voice and see the passages each answer is based on
+- Interrupt the avatar mid-sentence and ask a follow-up that needs the earlier context
+- Drop an invoice into the inbox bucket and receive its type and extracted fields in Slack
+- File a request by voice, approve it in Slack, and hear the assistant confirm the outcome
+- Archive a conversation to Google Docs and ask about it later
+- Swap the avatar provider or point the language model at a remote endpoint with one value
 
 ### See it in action
 
@@ -401,7 +407,8 @@ A presenter script with timings, exact questions and expected answers is in [doc
 ```
 .
 ├── README.md
-├── LICENSE
+├── LICENSE                       # MIT
+├── CONTRIBUTING.md               # How to propose changes and the checks to run
 ├── chart/                        # Helm chart (template layout): datastores, n8n, LiveKit,
 │   ├── README.md                 #   chart reference: what it creates, every value with its default
 │   ├── Chart.yaml                #   application services, and model InferenceServices
@@ -424,6 +431,7 @@ A presenter script with timings, exact questions and expected answers is in [doc
 │   ├── import-workflows.sh       # Updates the n8n workflows through the public API
 │   └── load-sample-docs.sh       # Uploads the sample documents into MinIO
 ├── docs/
+│   ├── development.md            # Running the services locally, tests, images, documents, workflows
 │   ├── demo-script.md            # 15-minute presenter script with expected answers
 │   ├── troubleshooting.md        # Symptoms, causes, checks and fixes from the demo cluster
 │   └── images/                   # Architecture diagram and screenshots

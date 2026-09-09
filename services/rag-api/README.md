@@ -10,6 +10,9 @@ the voice agent, and the n8n workflows.
 | POST | `/v1/chat` | `{"message", "session_id"?, "user_id"?, "mode": "text"\|"voice"}` → answer, citations, guardrail info |
 | POST | `/v1/search` | retrieval only: `{"query", "top_k"?}` → hits with source, page, snippet, score |
 | GET | `/v1/sessions/{id}/messages` | conversation history with citations |
+| GET | `/v1/sessions/{id}/notifications` | undelivered outcome notices for the session (ticket decisions), newest per ticket |
+| POST | `/v1/sessions/{id}/notifications/ack` | `{"ids": [...]}` marks notices delivered and records them in the transcript |
+| POST | `/v1/sessions/{id}/archive` | hands the session to the transcript archival workflow (WF5) |
 | GET | `/v1/sessions/{id}/transcript` | plain-text transcript (transcript archival workflow) |
 | DELETE | `/v1/sessions/{id}` | forget a conversation |
 | GET, PUT, DELETE | `/v1/users/{id}/memory` | long-lived facts about a user, injected into prompts |
@@ -17,13 +20,19 @@ the voice agent, and the n8n workflows.
 | POST | `/v1/tickets` | create a ticket |
 | GET | `/v1/tickets`, `/v1/tickets/{ref}` | list, or fetch by id or `REQ-000123` |
 | PATCH | `/v1/tickets/{ref}` | `{"status", "actor", "note", "payload"}`; transitions are validated |
+| GET | `/v1/tickets/stale` | tickets past the reminder and escalation thresholds (SLA workflow) |
+| POST | `/v1/tickets/stale/escalate` | `?ticket_ref=&current_priority=` raises the priority one step |
 | POST | `/v1/requests` | service request intake: classify, create the ticket, notify n8n |
+| GET | `/v1/knowledge-gaps/digest` | `?hours=24` aggregated low-confidence questions (knowledge-gap workflow) |
 | GET | `/v1/voice/token` | LiveKit token; `session_id` maps to room `session-<id>` |
 | GET | `/v1/info` | active models and providers |
 
 Interactive docs at `/docs`.
 
 ## How a chat request flows
+
+Before retrieval, an intent check classifies the message as a question or a service request. Requests skip the LLM answer: the ticket is created, the n8n approval workflow is notified, and the reply carries the ticket. Decisions made in Slack come back as notices (`/v1/sessions/{id}/notifications`), which the voice agent speaks and the frontend shows.
+
 
 1. Input guardrail (`GUARDRAILS_PROVIDER`): a flagged message gets the safe refusal and is stored as blocked.
 2. Retrieval: the question is embedded and Qdrant returns the top passages above `RAG_MIN_SCORE`.

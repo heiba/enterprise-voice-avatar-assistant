@@ -7,7 +7,7 @@ global:
 # to GitHub's container registry. The workflow rewrites the per-service image
 # tags below after every successful build.
 images:
-  registry: ghcr.io/heiba
+  registry: ghcr.io/rh-ai-quickstart
 
 voiceAgent:
   enabled: true

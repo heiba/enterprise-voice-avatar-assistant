@@ -212,7 +212,8 @@ models:
     servedModelName: bge-m3
     storageUri: hf://BAAI/bge-m3
     args:
-      - --task=embed
+      # vLLM 0.21+ removed --task; --runner pooling selects the embedding path (accepted since 0.10)
+      - --runner=pooling
       - --max-model-len=8192
     resources:
       requests:

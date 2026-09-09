@@ -1,5 +1,7 @@
 import base64
 import json
+import shutil
+from pathlib import Path
 
 import httpx
 from fastapi.testclient import TestClient
@@ -117,3 +119,76 @@ def test_enrichment_from_tavus_is_cached_and_tolerant(monkeypatch):
 
     monkeypatch.setattr(faces, "_tavus_faces", failing)
     assert [f.name for f in faces.enriched()] == ["Jackie", "r9d3aaaa1111", "Pinned"]
+
+
+def _make_clip(path: Path) -> None:
+    """A 1.5 s solid-colour clip, encoded with PyAV so the test needs no ffmpeg binary."""
+    import av
+    from PIL import Image
+
+    with av.open(str(path), "w") as container:
+        stream = container.add_stream("mpeg4", rate=10)
+        stream.width, stream.height, stream.pix_fmt = 64, 48, "yuv420p"
+        for n in range(15):
+            frame = av.VideoFrame.from_image(Image.new("RGB", (64, 48), (200, 40 + n, 40)))
+            for packet in stream.encode(frame):
+                container.mux(packet)
+        for packet in stream.encode():
+            container.mux(packet)
+
+
+def test_poster_is_cut_from_the_thumbnail_and_cached(monkeypatch, tmp_path):
+    _tavus(monkeypatch, api_key="k")
+    monkeypatch.setattr(faces, "POSTER_DIR", tmp_path / "posters")
+    faces._poster_failed.clear()
+    clip = tmp_path / "clip.mp4"
+    _make_clip(clip)
+    monkeypatch.setattr(
+        faces,
+        "_tavus_faces",
+        lambda ids, key: {
+            "r67d1c9cac37": {"face_id": "r67d1c9cac37", "thumbnail_video_url": "https://cdn/j.mp4"}
+        },
+    )
+    downloads = []
+
+    def fake_download(url, target):
+        downloads.append(url)
+        shutil.copy(clip, target)
+
+    monkeypatch.setattr(faces, "_download", fake_download)
+
+    data = faces.poster("r67d1c9cac37")
+    assert data and data[:2] == b"\xff\xd8"  # JPEG
+    assert faces.poster("r67d1c9cac37") == data and downloads == ["https://cdn/j.mp4"]  # cached
+    assert faces.poster("rpinned") is None  # no thumbnail declared or found
+    with TestClient(app) as client:
+        body = client.get("/v1/voice/faces").json()
+        assert body["faces"][0]["poster_url"] == "/v1/voice/faces/r67d1c9cac37/poster"
+        assert body["faces"][2]["poster_url"] is None
+        image = client.get("/v1/voice/faces/r67d1c9cac37/poster")
+        assert image.status_code == 200 and image.headers["content-type"] == "image/jpeg"
+        assert client.get("/v1/voice/faces/rpinned/poster").status_code == 404
+
+
+def test_poster_failure_is_remembered(monkeypatch, tmp_path):
+    _tavus(monkeypatch, api_key="k")
+    monkeypatch.setattr(faces, "POSTER_DIR", tmp_path / "posters")
+    faces._poster_failed.clear()
+    monkeypatch.setattr(
+        faces,
+        "_tavus_faces",
+        lambda ids, key: {
+            "r67d1c9cac37": {"face_id": "r67d1c9cac37", "thumbnail_video_url": "https://cdn/j.mp4"}
+        },
+    )
+    attempts = []
+
+    def failing(url, target):
+        attempts.append(url)
+        raise httpx.ConnectError("offline")
+
+    monkeypatch.setattr(faces, "_download", failing)
+    assert faces.poster("r67d1c9cac37") is None
+    assert faces.poster("r67d1c9cac37") is None
+    assert attempts == ["https://cdn/j.mp4"]  # not retried within the back-off window

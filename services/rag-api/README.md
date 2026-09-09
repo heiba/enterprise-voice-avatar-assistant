@@ -25,7 +25,8 @@ the voice agent, and the n8n workflows.
 | POST | `/v1/requests` | service request intake: classify, create the ticket, notify n8n |
 | GET | `/v1/knowledge-gaps/digest` | `?hours=24` aggregated low-confidence questions (knowledge-gap workflow) |
 | GET | `/v1/voice/token` | LiveKit token; `session_id` maps to room `session-<id>`; `face_id` puts the chosen avatar face in the token |
-| GET | `/v1/voice/faces` | avatar faces to choose from (`AVATAR_FACES`), with the voice each one speaks with; names and thumbnails from Tavus when `TAVUS_API_KEY` is set |
+| GET | `/v1/voice/faces` | avatar faces to choose from (`AVATAR_FACES`), with the voice each one speaks with; names and thumbnail URLs from Tavus when `TAVUS_API_KEY` is set |
+| GET | `/v1/voice/faces/{id}/poster` | JPEG still of a face for the picker, cut from the Tavus thumbnail video and cached in the pod |
 | GET | `/v1/info` | active models and providers |
 
 Interactive docs at `/docs`.

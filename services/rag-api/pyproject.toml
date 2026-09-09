@@ -12,6 +12,8 @@ dependencies = [
   "qdrant-client>=1.12",
   "psycopg[binary]>=3.2",
   "livekit-api>=1.0",
+  "av>=14",
+  "pillow>=10",
 ]
 
 [dependency-groups]

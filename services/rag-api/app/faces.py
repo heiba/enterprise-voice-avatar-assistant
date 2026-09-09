@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
 import threading
 import time
 from dataclasses import dataclass, replace
+from pathlib import Path
 
 import httpx
 
@@ -27,6 +30,11 @@ MAX_FACES = 4  # the UI offers at most four faces
 FACE_ATTRIBUTE = "avatar_face"  # LiveKit participant attribute carrying the chosen face
 CACHE_SECONDS = 3600.0
 RETRY_SECONDS = 300.0
+# Posters: one still per face, cut from the Tavus thumbnail video (a full clip of several MB
+# with its index at the end, so browsers cannot show a frame without downloading all of it).
+POSTER_DIR = Path(os.environ.get("FACE_POSTER_DIR", "/tmp/face-posters"))
+POSTER_SIZE = 192
+POSTER_AT_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -161,3 +169,88 @@ def enriched() -> list[Face]:
 def reset_cache() -> None:
     with _lock:
         _cache.clear()
+
+
+# --- Posters (still images for the picker) ---------------------------------------------------
+
+_poster_lock = threading.Lock()
+_poster_failed: dict[str, float] = {}
+
+
+def poster_path(face_id: str) -> Path:
+    return POSTER_DIR / f"{face_id}.jpg"
+
+
+def poster_url(face: Face) -> str | None:
+    return f"/v1/voice/faces/{face.id}/poster" if face.thumbnail_url else None
+
+
+def _download(url: str, target: Path) -> None:
+    with (
+        httpx.Client(timeout=httpx.Timeout(180.0, connect=10.0), follow_redirects=True) as http,
+        http.stream("GET", url) as response,
+    ):
+        response.raise_for_status()
+        with target.open("wb") as out:
+            for chunk in response.iter_bytes(1 << 20):
+                out.write(chunk)
+
+
+def _extract_frame(video: Path, target: Path, at_seconds: float = POSTER_AT_SECONDS) -> None:
+    """Write a square JPEG of one frame (about `at_seconds` in) to target."""
+    import av
+    from PIL import Image
+
+    image = None
+    with av.open(str(video)) as container:
+        stream = container.streams.video[0]
+        try:
+            container.seek(int(at_seconds / stream.time_base), stream=stream)
+        except Exception as exc:  # noqa: BLE001 - some clips cannot seek; the first frame will do
+            log.debug("seek in %s failed (%s); using the first frame", video.name, exc)
+        for frame in container.decode(stream):
+            image = frame.to_image()
+            break
+    if image is None:
+        raise ValueError("no video frame decoded")
+    width, height = image.size
+    side = min(width, height)
+    left, top = (width - side) // 2, (height - side) // 3  # faces sit above the middle of portrait clips
+    image = image.crop((left, top, left + side, top + side)).resize((POSTER_SIZE, POSTER_SIZE), Image.LANCZOS)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(".tmp")
+    image.convert("RGB").save(tmp, "JPEG", quality=85)
+    tmp.replace(target)
+
+
+def poster(face_id: str) -> bytes | None:
+    """JPEG poster for a face, generated on first use and cached on disk; None when unavailable."""
+    face = next((f for f in enriched() if f.id == face_id), None)
+    if face is None or not face.thumbnail_url:
+        return None
+    path = poster_path(face_id)
+    if path.exists():
+        return path.read_bytes()
+    with _poster_lock:
+        if path.exists():
+            return path.read_bytes()
+        if time.monotonic() < _poster_failed.get(face_id, 0.0):
+            return None
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                video = Path(tmp) / "face.mp4"
+                _download(face.thumbnail_url, video)
+                _extract_frame(video, path)
+            log.info("poster generated for face %s (%s)", face_id, face.name)
+        except Exception as exc:  # noqa: BLE001 - a missing poster only costs the picture
+            log.warning("no poster for face %s: %s", face_id, exc)
+            _poster_failed[face_id] = time.monotonic() + RETRY_SECONDS
+            return None
+    return path.read_bytes()
+
+
+def warm_posters() -> None:
+    """Generate every poster once so the first page load does not wait for downloads."""
+    for face in enriched():
+        if face.thumbnail_url:
+            poster(face.id)

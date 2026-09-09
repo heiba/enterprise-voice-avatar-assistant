@@ -156,6 +156,7 @@ class VoiceFace(BaseModel):
     gender: str | None = None
     voice: str
     thumbnail_url: str | None = None
+    poster_url: str | None = None  # still image served by this API, relative to its base URL
 
 
 class VoiceFacesResponse(BaseModel):

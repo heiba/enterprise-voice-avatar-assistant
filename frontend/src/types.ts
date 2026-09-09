@@ -71,6 +71,7 @@ export interface VoiceFace {
   gender: string | null;
   voice: string;
   thumbnail_url: string | null;
+  poster_url?: string | null;
 }
 
 export interface VoiceFaces {

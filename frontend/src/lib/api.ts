@@ -43,6 +43,11 @@ export function voiceFaces() {
   return request<VoiceFaces>("/v1/voice/faces");
 }
 
+/** Absolute URL for a path the API returned relative to its base (for example a face poster). */
+export function apiUrl(path: string) {
+  return `${BASE}${path}`;
+}
+
 export function notifications(sessionId: string) {
   return request<Notification[]>(`/v1/sessions/${encodeURIComponent(sessionId)}/notifications`);
 }

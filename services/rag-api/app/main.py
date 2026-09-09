@@ -16,17 +16,19 @@ POST /v1/requests                   service request intake: classify, create tic
 GET  /v1/knowledge-gaps/digest      aggregated unanswered questions over a time window
 GET  /v1/voice/token                LiveKit token for the browser (face_id picks the avatar face)
 GET  /v1/voice/faces                avatar faces to choose from, with the voice each one speaks with
+GET  /v1/voice/faces/{id}/poster    still image of a face for the picker (cut from the Tavus thumbnail video)
 GET  /v1/info                       active models and providers (for the diagnostics panel)
 """
 
 import asyncio
 import logging
+import threading
 import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 from . import classify, clients, faces, knowledge_gaps, memory, notifications, rag, retrieval, tickets, voice
 from .config import settings
@@ -67,6 +69,8 @@ async def lifespan(_: FastAPI):
         settings.qdrant_url,
     )
     await asyncio.to_thread(memory.init_schema)
+    if faces.catalog() and settings.tavus_api_key:
+        threading.Thread(target=faces.warm_posters, name="face-posters", daemon=True).start()
     yield
 
 
@@ -279,8 +283,21 @@ async def voice_faces():
         default=faces.default_id(),
         faces=[
             VoiceFace(
-                id=f.id, name=f.name, gender=f.gender, voice=faces.voice_for(f), thumbnail_url=f.thumbnail_url
+                id=f.id,
+                name=f.name,
+                gender=f.gender,
+                voice=faces.voice_for(f),
+                thumbnail_url=f.thumbnail_url,
+                poster_url=faces.poster_url(f),
             )
             for f in items
         ],
     )
+
+
+@app.get("/v1/voice/faces/{face_id}/poster")
+async def voice_face_poster(face_id: str):
+    data = await asyncio.to_thread(faces.poster, face_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="no poster for this face")
+    return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})

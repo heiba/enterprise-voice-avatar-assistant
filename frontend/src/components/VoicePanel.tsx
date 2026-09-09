@@ -152,13 +152,17 @@ export function VoicePanel({ sessionId, userName, onAssistantTurn, onActiveChang
 }
 
 function FaceThumb({ face }: { face: VoiceFace }) {
-  // Tavus "thumbnails" are full replica videos, too heavy to load four of them for a picker,
-  // so the picker shows the initial and the face itself appears when the session starts.
-  return (
-    <span className={`face-thumb${face.gender ? ` ${face.gender}` : ""}`} aria-hidden="true">
-      {face.name.trim().charAt(0).toUpperCase() || "?"}
-    </span>
-  );
+  // The RAG API cuts a still from the Tavus thumbnail video; until it is ready (or when there is
+  // none) the initial stands in.
+  const [failed, setFailed] = useState(false);
+  if (!face.poster_url || failed) {
+    return (
+      <span className={`face-thumb${face.gender ? ` ${face.gender}` : ""}`} aria-hidden="true">
+        {face.name.trim().charAt(0).toUpperCase() || "?"}
+      </span>
+    );
+  }
+  return <img className="face-thumb" src={api.apiUrl(face.poster_url)} alt="" loading="lazy" onError={() => setFailed(true)} />;
 }
 
 function VoiceStage({

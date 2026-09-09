@@ -1,0 +1,121 @@
+{
+  "name": "WF7 Knowledge gap digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "b1c2d3e4-2222-6666-bbbb-000000000001",
+      "name": "Weekday 9 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.RAG_API_URL }}/v1/knowledge-gaps/digest?hours=24",
+        "options": {}
+      },
+      "id": "b1c2d3e4-2222-6666-bbbb-000000000002",
+      "name": "Fetch gap digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nif (!d.total_gaps || d.total_gaps === 0) {\n  return [];\n}\nconst reasons = Object.entries(d.by_reason || {}).map(([k, v]) => `${k}: ${v}`).join(', ');\nconst questions = (d.top_questions || []).slice(0, 10);\nconst qLines = questions.map((q, i) => `${i + 1}. _\"${q.question.substring(0, 120)}\"_ — asked ${q.times_asked}x (avg score ${q.avg_score.toFixed(2)})`);\nconst blocks = [\n  { type: 'header', text: { type: 'plain_text', text: ':mag: Knowledge Gap Digest' } },\n  { type: 'section', text: { type: 'mrkdwn', text: `*${d.total_gaps} unanswered question(s)* in the last ${d.period_hours} hours\\n_Breakdown: ${reasons}_` } },\n  { type: 'divider' },\n  { type: 'section', text: { type: 'mrkdwn', text: `*Top unanswered questions:*\\n${qLines.join('\\n')}` } },\n  { type: 'context', elements: [{ type: 'mrkdwn', text: 'Add documents covering these topics to improve the assistant.' }] }\n];\nconst text = `Knowledge gap digest: ${d.total_gaps} unanswered questions in the last ${d.period_hours}h`;\nreturn [{ json: { blocks: JSON.stringify({ blocks }), text } }];"
+      },
+      "id": "b1c2d3e4-2222-6666-bbbb-000000000003",
+      "name": "Build digest message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#assistant-knowledge-gaps"
+        },
+        "otherOptions": {},
+        "messageType": "block",
+        "blocksUi": "={{ $json.blocks }}",
+        "text": "={{ $json.text }}"
+      },
+      "id": "b1c2d3e4-2222-6666-bbbb-000000000004",
+      "name": "Post digest",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        780,
+        0
+      ],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Weekday 9 AM": {
+      "main": [
+        [
+          {
+            "node": "Fetch gap digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch gap digest": {
+      "main": [
+        [
+          {
+            "node": "Build digest message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build digest message": {
+      "main": [
+        [
+          {
+            "node": "Post digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "active": false
+}

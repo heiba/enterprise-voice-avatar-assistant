@@ -12,6 +12,8 @@ cluster-specific values.
 | `wf3-classification-extraction.json` | `POST /webhook/classify` | calls the RAG API classifier, posts the type, summary and extracted fields to `#assistant-documents`, and forwards the JSON to `DOWNSTREAM_URL` when set |
 | `wf4-request-intake-approval.json` | `POST /webhook/request-intake` (from the RAG API) and `POST /webhook/slack-interactions` (Slack buttons) | posts an approval card with Approve and Reject buttons to `#assistant-approvals`; on a click records the decision on the ticket, fulfils approved requests (mock), notifies `#assistant-tickets`, and updates the Slack card |
 | `wf5-transcript-archival.json` | `POST /webhook/archive-transcript` with `{session_id}` | fetches the session transcript, writes it to a Google Doc when `GOOGLE_DOCS_FOLDER_ID` is set, and re-ingests it into the `transcripts` bucket |
+| `wf6-sla-escalation.json` | Schedule (every 15 min) | checks for tickets stuck in `pending_approval`; sends a reminder to `#assistant-approvals` after `SLA_REMINDER_MINUTES` (default 60) and escalates priority after `SLA_ESCALATION_MINUTES` (default 240), posting to `#assistant-tickets` |
+| `wf7-knowledge-gap-digest.json` | Schedule (weekdays 9 AM) | fetches unanswered questions from the last 24 hours, groups and ranks them, and posts a digest to `#assistant-knowledge-gaps` so content owners know what to add |
 
 ## Import
 
@@ -48,6 +50,8 @@ chart always sets.
 | `RAG_API_URL`, `INGESTION_URL` | in-cluster service URLs |
 | `DOWNSTREAM_URL` | optional HTTP endpoint that receives classified document JSON (WF3) |
 | `GOOGLE_DOCS_FOLDER_ID` | Drive folder for transcripts (WF5); empty skips Google Docs |
+| `SLA_REMINDER_MINUTES` | minutes before a pending ticket gets a Slack reminder (WF6, default 60) |
+| `SLA_ESCALATION_MINUTES` | minutes before a pending ticket's priority is escalated (WF6, default 240) |
 
 ## Manual tests
 
@@ -61,6 +65,14 @@ curl -s -X POST $N8N/webhook/minio-event -H 'Content-Type: application/json' -d 
 curl -s -X POST $N8N/webhook/classify -H 'Content-Type: application/json' -d '{"bucket":"documents","key":"password-policy.md"}'
 # WF5: archive a session transcript
 curl -s -X POST $N8N/webhook/archive-transcript -H 'Content-Type: application/json' -d '{"session_id":"<session id from the UI>"}'
+```
+
+```bash
+# WF6 and WF7 are schedule-triggered; test the underlying API endpoints directly:
+# Stale tickets (SLA)
+curl -s $RAG/v1/tickets/stale | python3 -m json.tool
+# Knowledge gap digest
+curl -s $RAG/v1/knowledge-gaps/digest?hours=24 | python3 -m json.tool
 ```
 
 Executions and their inputs and outputs are visible under *Executions* in n8n.

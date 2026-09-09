@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     n8n_url: str = "http://n8n:5678"
     n8n_request_webhook_path: str = "/webhook/request-intake"
 
+    # SLA escalation
+    sla_reminder_minutes: int = 60
+    sla_escalation_minutes: int = 240
+
+    # Knowledge gap detection
+    gap_score_threshold: float = 0.45
+
     cors_origins: str = "*"
     log_level: str = "INFO"
 

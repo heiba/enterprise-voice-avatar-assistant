@@ -9,7 +9,7 @@ NS="${NS:-$(oc project -q)}"
 QUERY="${1:-}"
 
 echo "=== documents (indexed = chunks > 0) ==="
-oc exec deploy/rag-api -n "$NS" -- python -c "
+oc exec deploy/rag-api -n "$NS" -- .venv/bin/python -c "
 import urllib.request, json, collections
 d = json.load(urllib.request.urlopen('http://ingestion:8080/v1/documents'))
 items = d if isinstance(d, list) else d.get('documents', d.get('items', []))

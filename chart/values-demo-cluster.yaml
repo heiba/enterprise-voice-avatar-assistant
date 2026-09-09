@@ -32,16 +32,16 @@ voiceAgent:
     - id: rf6b1c8d5e9d
       name: Samantha
       gender: female
-  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-voice-agent:sha-cd70345
+  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-voice-agent:sha-fe37066
 frontend:
   enabled: true
-  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-frontend:sha-cd70345
+  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-frontend:sha-fe37066
 ragApi:
   enabled: true
-  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-rag-api:sha-cd70345
+  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-rag-api:sha-fe37066
 ingestion:
   enabled: true
-  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-ingestion:sha-cd70345
+  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-ingestion:sha-fe37066
 
 models:
   tts:

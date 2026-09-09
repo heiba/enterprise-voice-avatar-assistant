@@ -1,7 +1,6 @@
 """Track and aggregate questions the RAG pipeline could not answer confidently."""
 
 import logging
-from datetime import datetime, timezone
 from typing import Any
 
 from . import memory
@@ -66,7 +65,7 @@ def escalate_ticket(ticket_ref: str, current_priority: str) -> dict[str, Any] | 
         return None
     from . import tickets
 
-    ticket = tickets.update(
+    tickets.update(
         ticket_ref,
         tickets.TicketUpdate(
             actor="sla-escalation",
@@ -106,7 +105,11 @@ def digest(hours: int = 24) -> dict[str, Any]:
         "total_gaps": total[0]["cnt"] if total else 0,
         "by_reason": {r["reason"]: r["cnt"] for r in by_reason or []},
         "top_questions": [
-            {"question": r["question"], "times_asked": r["times_asked"], "avg_score": float(r["avg_score"] or 0)}
+            {
+                "question": r["question"],
+                "times_asked": r["times_asked"],
+                "avg_score": float(r["avg_score"] or 0),
+            }
             for r in top_questions or []
         ],
     }

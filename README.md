@@ -1,6 +1,6 @@
 # Deploy an enterprise voice and avatar assistant on OpenShift AI
 
-Ground a voice-enabled, avatar-fronted assistant in your company documents with RAG, n8n workflows, and models served on Red Hat OpenShift AI.
+Ground a voice-enabled, avatar-fronted assistant in your company documents with RAG, n8n workflows, and models served on Red Hat® OpenShift® AI.
 
 > **Status: work in progress.** This README describes the target design. Components are being added incrementally; see [Repository structure](#repository-structure) for what exists today.
 
@@ -369,7 +369,7 @@ A presenter script with timings, exact questions and expected answers is in [doc
 - [Qdrant](https://qdrant.tech/documentation/)
 - [n8n](https://docs.n8n.io/)
 - [LiveKit Agents](https://docs.livekit.io/agents/)
-- [TrustyAI Guardrails](https://trustyai.org/docs/main/guardrails)
+- [TrustyAI Guardrails Orchestrator](https://trustyai.org/docs/main/gorch-tutorial)
 - [Llama Guard](https://www.llama.com/docs/model-cards-and-prompt-formats/llama-guard-3/)
 - Related quickstarts: [basic-speech-to-text-with-whisper](https://github.com/rh-ai-quickstart/basic-speech-to-text-with-whisper), [RAG](https://github.com/rh-ai-quickstart/RAG), [guardrailing-llms](https://github.com/rh-ai-quickstart/guardrailing-llms), [it-self-service-agent](https://github.com/rh-ai-quickstart/it-self-service-agent)
 

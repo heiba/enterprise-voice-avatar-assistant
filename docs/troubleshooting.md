@@ -1,0 +1,83 @@
+# Troubleshooting
+
+Symptoms first, then the cause, the command that confirms it, and the fix. Everything here was hit while building the demo cluster (OpenShift 4.20, OpenShift AI 3.5, 4x L4).
+
+## Install and values
+
+**`helm install` fails with "models.<x>.deploy is false but models.<x>.endpoint is empty".** Intentional: a model set to `deploy: false` needs `endpoint` (OpenAI-compatible base URL including `/v1`) and `servedModelName`. Check the names the endpoint serves: `curl <endpoint>/models`. Or run `MODELS=maas scripts/deploy.sh` to be prompted.
+
+**Pods stay in `CreateContainerConfigError` with "secret not found".** The chart never creates secrets. Run `NAMESPACE=<project> scripts/create-secrets.sh`, then `oc get secret -n <project> | grep assistant-`.
+
+**PodSecurity warnings ("would violate PodSecurity restricted") on `oc apply`.** A pod without `seccompProfile`, `runAsNonRoot`, dropped capabilities or `allowPrivilegeEscalation: false`. Every chart pod carries all four through the `assistant.securityContext` helper; a raw `oc run` does not. Use `scripts/test-services.sh` instead of ad hoc pods.
+
+**Argo CD sync stuck in Progressing, MinIO setup Job never completes.** The setup Job must be a `Sync` hook, not `PostSync` (PostSync waits for global health, which waits for the Job). Check `oc get job -n <project>`; the chart's Job carries `argocd.argoproj.io/hook: Sync`. A stuck operation is cleared with `argocd app terminate-op` or by patching `status.operationState.phase` to `Terminating`.
+
+**`oc get application` returns the wrong kind.** The short name clashes with another CRD on OpenShift; use `oc get applications.argoproj.io -n openshift-gitops`.
+
+**Service starts with `LIVEKIT_PORT=tcp://…` or similar in its environment and crashes.** Kubernetes service links inject variables named after every Service in the namespace. Every chart pod sets `enableServiceLinks: false`; keep that when adding pods.
+
+**Image pull errors from Docker Hub (`toomanyrequests`).** Docker Hub's anonymous pull limit is shared by the whole cluster egress IP. Use images from `ghcr.io`, `quay.io` or `registry.redhat.io`; the chart already does (n8n from ghcr, MinIO and PostgreSQL from quay).
+
+## Models and GPUs
+
+**InferenceService predictor pod Pending, event "Insufficient nvidia.com/gpu".** Count what is allocated: `oc describe node <gpu node> | grep -A3 'nvidia.com/gpu'`, and `oc get pods -A -o json | jq '[.items[] | select(.spec.containers[].resources.limits."nvidia.com/gpu")] | .[] | .metadata.namespace + "/" + .metadata.name'`. Models served from the dashboard in other projects count too. Free a GPU or point the model at an existing endpoint (`deploy: false`).
+
+**Model pod restarts on every chart change, needing a second GPU during the rollout.** KServe defaults to a rolling update. The chart sets `deploymentStrategy: {type: Recreate}` and `serving.kserve.io/autoscalerClass: external` on every InferenceService; keep them when adding models.
+
+**Llama crash-loops with a KV cache allocation error.** Without `--max-model-len` vLLM reserves cache for the full 128k context, too much for a 24 GiB card. The chart passes `--max-model-len=16384`.
+
+**BGE-M3 fails with "unrecognized arguments: --task=embed".** vLLM 0.21 and later removed `--task`. The chart uses `--runner=pooling`, valid from vLLM 0.10; check the version in the pod: `oc exec <bge pod> -c kserve-container -- python -c "import vllm; print(vllm.__version__)"`.
+
+**Granite Guardian refuses to start: "default chat template is no longer allowed".** The modelcar ships no chat template. The chart mounts `chart/files/granite-guardian-3.3-chat-template.jinja` and passes `--chat-template`; the verdict format is `<score>yes|no</score>`.
+
+**Requests to a reused Whisper (LLMInferenceService) fail with TLS errors.** OpenShift AI 3.5 LLMInferenceService workloads serve HTTPS on 8000 with a service-CA certificate. Use an `https://` endpoint and trust `/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt` (`SERVICE_CA_FILE` in the config map; `NODE_EXTRA_CA_CERTS` for n8n).
+
+**Models fail after a GPU operator or driver change.** Pin the vLLM runtime image to a digest verified with your driver; `chart/values.yaml` carries one verified with GPU operator 25.3.4 and 26.3.3 (driver 580, CUDA 13). Read your versions: `oc get nodes -L nvidia.com/cuda.driver-version.full,nvidia.com/cuda.runtime-version.full`.
+
+## Ingestion and documents
+
+**PDF ingestion fails with `ImportError: libGL.so.1`.** Docling's OCR dependency pulls `opencv-python`, whose wheel needs a GL library the UBI image lacks. The ingestion image swaps it for `opencv-python-headless` at build time; if you rebuild the image, keep that step in `services/ingestion/Containerfile`.
+
+**Uploads to MinIO do not trigger n8n.** Check the bucket notification: run `mc event ls local/documents` from a pod with the MinIO client (see `scripts/load-sample-docs.sh` for the pod spec). The setup Job registers the `arn:minio:sqs::N8N:webhook` target for `documents` and `inbox`; it can only do so once n8n is reachable, so re-run the Job (Argo CD sync, or `helm upgrade`) if n8n came up later.
+
+**A document shows up twice in citations.** Documents are keyed by bucket and object name; the same content under two names is two documents. List them: `oc exec deploy/rag-api -- python -c "import urllib.request; print(urllib.request.urlopen('http://ingestion:8080/v1/documents').read().decode())"`, delete one with `DELETE http://ingestion:8080/v1/documents/<doc_id>`. Re-uploading under the same name replaces all chunks.
+
+**The loader indexed a README or other stray file.** `scripts/load-sample-docs.sh` uploads every `.md`, `.docx` and `.pdf` in `data/sample-docs/` except `README.md`; pass file names to upload a subset.
+
+## Voice, LiveKit and TURN
+
+**Browser voice shows "Room: connecting" then fails with "could not establish pc connection".** Media is not reaching the SFU. Browsers behind corporate networks need TURN over TLS on 443: the chart exposes it through a passthrough Route (`livekit-turn-<ns>.<domain>`) with the certificate in `livekit.turn.tlsSecret`. Test the port: `openssl s_client -connect livekit-turn-<ns>.<domain>:443 </dev/null`.
+
+**TURN relay allocated but no media flows (LiveKit log "permission denied" for a private IP).** LiveKit refuses TURN permissions for private peer addresses, which is what the SFU's own pod IP is. `livekit.turn.allowRestrictedPeerCidrs` must contain the pod network (the chart default lists the RFC 1918 ranges).
+
+**Voice panel stays on "Connecting…" and the label never changes.** The room is connected but no agent joined: LiveKit dispatches an agent once, when the room is created, so a worker restart at that instant leaves the room without one. Click End voice, then Start (new room, new dispatch). Confirm the worker is registered: `oc logs deploy/voice-agent | grep "registered worker"`.
+
+**Second voice session after End voice does nothing.** Fixed in the agent: it closes the room when the person leaves and ends the avatar provider's conversation. If you run an older image, the stale room keeps the old agent; delete the room with the LiveKit CLI or restart the voice agent.
+
+**Frontend shows a blank page after the first message.** Cached `index.html` from an older build with a different asset hash. The nginx config serves `index.html` with `no-cache`; hard-refresh once after an upgrade.
+
+## n8n, Slack and Google
+
+**`scripts/import-workflows.sh` fails with 401.** The n8n API key was not set or is the placeholder. Create one under Settings, n8n API, export it as `N8N_API_KEY`.
+
+**Workflow cannot be published: "Missing required credential".** A Slack or Google node without a credential. Slack is created automatically from `SLACK_BOT_TOKEN` in the integrations secret at first start; Google Docs must be attached once in the editor on both Google nodes of WF5. If the editor loops on "Autosave failed", unpublish the workflow first, attach the credential, then publish.
+
+**Slack approval card has no buttons.** The n8n Slack node needs the Block Kit wrapper `{"blocks": [...]}`; a bare array is silently dropped. WF4 builds the wrapper; keep it if you edit the card.
+
+**Slack interactivity URL field is missing in the app settings.** Socket Mode is on. Turn it off; the request URL must be `https://<n8n host>/webhook/slack-interactions`.
+
+**Button clicks reach n8n but the ticket does not change.** Look at the WF4 execution in n8n; a 409 from `PATCH /v1/tickets/<ref>` means an illegal state transition (for example approving a ticket that is already fulfilled).
+
+**Webhooks report "not registered" right after an n8n restart.** Activation takes a few seconds after `/healthz` turns green. Re-probe: `curl https://<n8n host>/webhook/chat` should answer "not registered for GET requests", which means it exists.
+
+**Google sign-in in n8n expires after seven days.** The OAuth consent screen is in Testing status. Publish the app in Google Cloud console to remove the limit; the unverified-app warning stays and is fine for a demo.
+
+**WF5 fails at "Transcript to file" with "The value in transcript is not set".** The Google Docs response replaced the prepared item. The shipped workflow restores the transcript after the Docs write; re-import if you edited the workflow by hand.
+
+## Avatar
+
+**The face never appears, audio only, log says the avatar provider failed to start.** The agent falls back to audio after `avatar_start_timeout_seconds`. Check `oc logs deploy/voice-agent | grep -i avatar`. Common causes: `TAVUS_API_KEY` or `TAVUS_FACE_ID` missing from the integrations secret (or `voiceAgent.extraEnv`), the provider cannot reach the public LiveKit URL (`LIVEKIT_PUBLIC_URL` must be the `wss://` Route), or the plan's single stream is still held by a previous conversation. List and end stale conversations with the Tavus API: `GET https://tavusapi.com/v2/conversations?status=active`, then `POST …/conversations/<id>/end`, using `x-api-key`.
+
+**Voice or face does not match.** The Kokoro voice is `models.tts.voice` (`af_*`, `bf_*` female; `am_*`, `bm_*` male); the face is `voiceAgent.extraEnv.TAVUS_FACE_ID`. Both are config map changes that restart the voice agent.
+
+**The approval outcome is not spoken.** Notices are delivered to the conversation that filed the request. A ticket created with curl or in another browser session cannot reach the live voice room; file the request in the same session.

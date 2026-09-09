@@ -332,6 +332,8 @@ Back up `assistant-n8n`: losing `N8N_ENCRYPTION_KEY` makes every credential stor
 
 ### Validating the deployment
 
+If something does not come up, [docs/troubleshooting.md](docs/troubleshooting.md) lists the symptoms seen while building this quickstart with the command that confirms each and the fix.
+
 1. Check that all pods are running. Model pods can take several minutes to download weights on first start.
 
 ```bash
@@ -393,6 +395,8 @@ The demo follows one storyline, from deployment to portability. Each step builds
 9. **Open the OpenShift AI dashboard** to show the served models and their metrics, then the Qdrant and PostgreSQL data behind the demo.
 10. **Swap the avatar provider or the LLM endpoint** with a values change and redeploy, demonstrating portability and data sovereignty.
 
+A presenter script with timings, exact questions and expected answers is in [docs/demo-script.md](docs/demo-script.md).
+
 ## Repository structure
 
 ```
@@ -416,6 +420,8 @@ The demo follows one storyline, from deployment to portability. Each step builds
 │   ├── import-workflows.sh       # Updates the n8n workflows through the public API
 │   └── load-sample-docs.sh       # Uploads the sample documents into MinIO
 ├── docs/
+│   ├── demo-script.md            # 15-minute presenter script with expected answers
+│   ├── troubleshooting.md        # Symptoms, causes, checks and fixes from the demo cluster
 │   └── images/                   # Architecture diagram and screenshots
 ├── n8n/                          # Workflow docs and the Slack app manifest (workflow JSON lives in chart/files/n8n-workflows/)
 ├── frontend/                     # React chat UI: citations, voice, avatar video

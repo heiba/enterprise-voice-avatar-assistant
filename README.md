@@ -14,6 +14,7 @@ Ground a voice-enabled, avatar-fronted assistant in your company documents with 
   - [Minimum hardware requirements](#minimum-hardware-requirements)
   - [Minimum software requirements](#minimum-software-requirements)
   - [Required user permissions](#required-user-permissions)
+  - [Third-party accounts and keys](#third-party-accounts-and-keys)
 - [Deploy](#deploy)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
@@ -23,6 +24,9 @@ Ground a voice-enabled, avatar-fronted assistant in your company documents with 
 - [Repository structure](#repository-structure)
 - [References](#references)
 - [Technical details](#technical-details)
+  - [How it works](#how-it-works)
+  - [Configuration](#configuration)
+  - [Local development](#local-development)
 - [Tags](#tags)
 
 ## Overview
@@ -113,6 +117,17 @@ How data moves through the system:
 4. **Service requests.** When a chat or voice message is a request rather than a question, the RAG API classifies it, opens a ticket in PostgreSQL, and hands it to the n8n approval workflow. The decision made in Slack is written back to the ticket and pushed into the same conversation as a notice, which the avatar speaks and the chat shows.
 5. **Workflows.** Classification, request intake, Slack approvals, and transcript archival run as n8n workflows that call the RAG API and the Slack and Google Docs integrations.
 
+| Component | Role | Runs as | Talks to |
+|---|---|---|---|
+| Frontend | Chat with citations, voice session, avatar video | nginx serving a React app, proxies `/api` to the RAG API | RAG API, LiveKit |
+| RAG API | Retrieval, guardrails, memory, request intake, tickets, notices | FastAPI | LLM, embeddings, guardrails model, Qdrant, PostgreSQL, n8n |
+| Ingestion | Docling parsing, chunking, embedding, indexing | FastAPI | MinIO, embeddings model, Qdrant, PostgreSQL |
+| Voice agent | Turn detection, transcription, spoken answers, avatar hand-off | LiveKit Agents worker | LiveKit, Whisper, RAG API, TTS, avatar provider |
+| LiveKit | WebRTC signaling and media, TURN over TLS | LiveKit server | browsers, voice agent, avatar provider |
+| n8n | Ingestion, classification, approvals, archival, SLA and digest workflows | n8n with the workflows shipped in the chart | RAG API, ingestion, Slack, Google Docs |
+| Models | Llama 3.1 8B (LLM), Whisper (STT), BGE-M3 (embeddings), Granite Guardian (guardrails), Kokoro (TTS) | vLLM on OpenShift AI (GPU); Kokoro on CPU | called over OpenAI-compatible APIs |
+| Datastores | PostgreSQL (conversations, memory, tickets, notices), Qdrant (vectors), MinIO (documents, inbox, transcripts) | Deployments with PVCs | the services above |
+
 ## Requirements
 
 ### Minimum hardware requirements
@@ -191,17 +206,7 @@ Cluster administrators who start from a bare cluster can install the platform pr
 
 ### Third-party accounts and keys
 
-Everything below is optional; the assistant runs without any of it. Keys go into the `assistant-integrations` secret (created by `scripts/create-secrets.sh` from environment variables, or updated later with `oc set data secret/assistant-integrations -n ${PROJECT} KEY=value`), never into git.
-
-**Tavus (avatar video).** Sign up at [platform.tavus.io](https://platform.tavus.io) and create an API key under the developer settings; put it in the secret as `TAVUS_API_KEY`. Pick a stock face in the [face library](https://maker.tavus.io/dev/faces); its ID starts with `r` and is not secret, so set it in values as `voiceAgent.extraEnv.TAVUS_FACE_ID` next to `voiceAgent.avatarProvider: tavus`. The free plan includes 25 conversational minutes per month and one concurrent stream, so rehearse with `avatarProvider: none` and switch Tavus on for the avatar runs. The provider receives only the assistant's synthesized speech; the microphone audio stays in the cluster.
-
-**Slack (notifications and approvals).** Create an app from `n8n/slack-app-manifest.json` at [api.slack.com/apps](https://api.slack.com/apps) (*Create New App*, *From a manifest*). Under *OAuth & Permissions* install it to the workspace and copy the *Bot User OAuth Token* (`xoxb-…`) into the secret as `SLACK_BOT_TOKEN`; n8n creates its Slack credential from it on first start. Under *Interactivity & Shortcuts* set the request URL to `https://<n8n host>/webhook/slack-interactions` and keep Socket Mode off. Create the channels `#assistant-ingestion`, `#assistant-documents`, `#assistant-approvals`, `#assistant-tickets`, and `#assistant-knowledge-gaps`, and invite the app to each.
-
-**Google Docs (transcript archival).** In [Google Cloud console](https://console.cloud.google.com) create a project, enable the *Google Docs API* and *Google Drive API*, configure the OAuth consent screen as *External* and add yourself as a test user, then create an *OAuth client ID* of type *Web application* whose authorized redirect URI is `https://<n8n host>/rest/oauth2-credential/callback`. In n8n add a *Google Docs OAuth2 API* credential with the client ID and secret and sign in. Create a Drive folder for transcripts and set its ID (the part of the URL after `/folders/`) in values as `n8n.extraEnv.GOOGLE_DOCS_FOLDER_ID`. While the consent screen stays in *Testing*, Google expires the sign-in after seven days; publishing the app removes that limit.
-
-**ElevenLabs (cloud text-to-speech, instead of Kokoro).** Create an API key at [elevenlabs.io](https://elevenlabs.io) and put it in the secret as `ELEVENLABS_API_KEY`; choose a voice ID from their voice library and set `voiceAgent.extraEnv.TTS_PROVIDER: elevenlabs` and `voiceAgent.extraEnv.ELEVENLABS_VOICE_ID: <id>`.
-
-**Simli and Hedra (alternative avatar providers).** Same pattern as Tavus with `SIMLI_API_KEY` and `SIMLI_FACE_ID`, or `HEDRA_API_KEY` and `HEDRA_AVATAR_IMAGE`, and the matching `voiceAgent.avatarProvider`.
+All optional: Tavus (or Simli, Hedra) for avatar video, Slack for notifications and approvals, Google Docs for transcript archival, ElevenLabs for cloud text-to-speech. Where to get each key, where it goes, and the free-tier caveats are in [docs/deployment.md](docs/deployment.md#third-party-accounts-and-keys).
 
 ## Deploy
 
@@ -218,14 +223,6 @@ Before deploying, ensure you have:
 
 ### Installation
 
-**Quick path.** One command does steps 2 to 5 below: it detects the current project and the cluster apps domain, creates the secrets, installs the chart, waits for pods and models, and prints the URLs. Add `MODELS=maas` to be prompted for remote model endpoints, `RUN_TESTS=1` to finish with `helm test`, and pass any extra Helm arguments such as `-f my-values.yaml`.
-
-```bash
-PROJECT=${PROJECT} scripts/deploy.sh
-```
-
-The manual steps follow for when you want to see or change each one.
-
 1. Clone the repository:
 
 ```bash
@@ -233,111 +230,29 @@ git clone https://github.com/rh-ai-quickstart/enterprise-voice-avatar-assistant.
 cd enterprise-voice-avatar-assistant
 ```
 
-2. Create a new OpenShift project and note the cluster apps domain:
+2. Run the installer in the project you want to use (it creates the project if it does not exist):
 
 ```bash
-PROJECT="voice-avatar-assistant"
-DOMAIN=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
-oc new-project ${PROJECT}
+PROJECT=voice-avatar-assistant scripts/deploy.sh
 ```
 
-3. Create the secrets. The script generates passwords for PostgreSQL, MinIO, n8n, and LiveKit, and stores any API keys you export beforehand (the variable names are listed in the script header). Secrets are never stored in git.
+   The script detects the cluster apps domain, creates the secrets (generated passwords plus any API keys exported in your environment), installs the chart with the models served on OpenShift AI, waits for pods and models, and prints the URLs. Add `RUN_TESTS=1` to finish with the connectivity test, or pass Helm arguments such as `-f my-values.yaml`.
 
-```bash
-NAMESPACE=${PROJECT} scripts/create-secrets.sh
-```
+3. Open the frontend URL it prints. The n8n workflows are imported and published automatically on first start; if `SLACK_BOT_TOKEN` was in the environment, Slack is wired too. Google Docs needs a one-time sign-in in n8n.
 
-4. Install the chart. `global.domain` gives Routes, n8n, and LiveKit stable public URLs. Pick one of the two model options.
+#### Alternative deployment options
 
-**Option A: deploy the models with the chart (default)**
+**Remote models.** `MODELS=maas scripts/deploy.sh` prompts for OpenAI-compatible endpoints and keys for the LLM, Whisper and embeddings instead of deploying them; no GPU is needed. Options mix per model.
 
-The chart creates InferenceServices on OpenShift AI for the LLM (Llama 3.1 8B Instruct, W4A16), Whisper, and the embeddings model, plus a CPU text-to-speech service. This needs three GPUs; see [Minimum hardware requirements](#minimum-hardware-requirements).
+**Manual Helm steps.** Secrets, `helm install`, per-model options and the n8n workflows step by step: [docs/deployment.md](docs/deployment.md#manual-installation-with-helm).
 
-```bash
-helm install assistant chart --namespace ${PROJECT} \
-  --set global.domain=${DOMAIN}
-```
+**Argo CD.** The same chart driven by the OpenShift GitOps operator from a values file per cluster: [docs/deployment.md](docs/deployment.md#deploying-with-argo-cd).
 
-**Option B: bring your own model endpoints (MaaS)**
-
-Point any model at an existing OpenAI-compatible endpoint instead. Endpoints include the protocol and the `/v1` path. API keys are read by the secrets script from `LLM_API_KEY`, `STT_API_KEY`, `EMBEDDINGS_API_KEY`, and `TTS_API_KEY`.
-
-```bash
-helm install assistant chart --namespace ${PROJECT} \
-  --set global.domain=${DOMAIN} \
-  --set models.llm.deploy=false \
-  --set models.llm.endpoint=https://LLM_ENDPOINT/v1 \
-  --set models.llm.servedModelName=LLM_MODEL_NAME \
-  --set models.stt.deploy=false \
-  --set models.stt.endpoint=https://STT_ENDPOINT/v1 \
-  --set models.stt.servedModelName=STT_MODEL_NAME \
-  --set models.embeddings.deploy=false \
-  --set models.embeddings.endpoint=https://EMBEDDINGS_ENDPOINT/v1 \
-  --set models.embeddings.servedModelName=EMBEDDINGS_MODEL_NAME
-```
-
-The two options mix per model, for example a MaaS LLM with Whisper deployed locally. For longer configurations copy `chart/values.yaml`, edit it, and pass it with `-f my-values.yaml`. Guardrails, the avatar provider, and the integrations are configured through the same file. Every value with its default and meaning is listed in [chart/README.md](chart/README.md).
-
-5. The n8n workflows are imported and published automatically when n8n starts (the `n8n.workflows` values control this). If `SLACK_BOT_TOKEN` was in the integrations secret at install time, the Slack nodes are wired too; otherwise open the n8n Route, add a Slack credential, and attach it. Google Docs (transcript archival) always needs a one-time sign-in in n8n. To update workflows later, edit `chart/files/n8n-workflows/` and run `scripts/import-workflows.sh`.
-
-```bash
-echo https://$(oc get route/n8n -n ${PROJECT} --template='{{.spec.host}}')
-```
-
-#### Deploying with Argo CD (optional)
-
-If the OpenShift GitOps operator is installed, Argo CD can own the deployment and keep it in sync with the `main` branch. It renders the same chart, so nothing differs from a manual install.
-
-```bash
-oc label namespace ${PROJECT} argocd.argoproj.io/managed-by=openshift-gitops
-oc apply -f deploy/argocd/appproject.yaml
-oc apply -f deploy/argocd/application.yaml
-```
-
-See [deploy/argocd/README.md](deploy/argocd/README.md) for per-cluster values files.
-
-#### Testing model access before deploying
-
-The chart refuses to install when a model is set to `deploy: false` without an endpoint and a served model name, and prints what to set. After the install, `helm test` checks every configured model from inside the cluster (model lists, an embeddings call, and an LLM chat completion) plus the datastores and services:
-
-```bash
-helm test assistant -n ${PROJECT} --logs
-```
-
-For Argo CD deployments there is no Helm release to test; `NS=${PROJECT} scripts/test-services.sh` renders the same test pod from the chart, runs it, and prints the results.
-
-### Working with the generated secrets
-
-`scripts/create-secrets.sh` creates seven Secrets in the project and never overwrites an existing one unless `FORCE=1` is set. Argo CD does not manage them, so they survive syncs.
-
-| Secret | Keys |
-|---|---|
-| `assistant-postgres` | `POSTGRESQL_USER`, `POSTGRESQL_PASSWORD`, `POSTGRESQL_DATABASE`, `DATABASE_URL` |
-| `assistant-minio` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` |
-| `assistant-n8n` | `N8N_ENCRYPTION_KEY` |
-| `assistant-qdrant` | `QDRANT_API_KEY` |
-| `assistant-livekit` | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` |
-| `assistant-models` | `LLM_API_KEY`, `STT_API_KEY`, `TTS_API_KEY`, `EMBEDDINGS_API_KEY`, `GUARDRAILS_API_KEY`, `HF_TOKEN` |
-| `assistant-integrations` | `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `TAVUS_API_KEY`, `TAVUS_FACE_ID`, `TAVUS_PAL_ID`, `SIMLI_API_KEY`, `SIMLI_FACE_ID`, `ELEVENLABS_API_KEY`, `GOOGLE_SERVICE_ACCOUNT_JSON` |
-
-Read a value, for example the MinIO console login:
-
-```bash
-oc extract secret/assistant-minio -n ${PROJECT} --to=-
-```
-
-Add or rotate one key without touching the others, then restart the pod that reads it (the config map and secrets are read at start):
-
-```bash
-oc set data secret/assistant-integrations -n ${PROJECT} TAVUS_API_KEY=<value>
-oc rollout restart deployment/voice-agent -n ${PROJECT}
-```
-
-Back up `assistant-n8n`: losing `N8N_ENCRYPTION_KEY` makes every credential stored in n8n unreadable. `FORCE=1 scripts/create-secrets.sh` regenerates all passwords and is only for a fresh install; on a running deployment it would lock the services out of PostgreSQL and MinIO.
+The generated secrets, how to read, rotate and back them up, are described in [docs/deployment.md](docs/deployment.md#working-with-the-generated-secrets).
 
 ### Validating the deployment
 
-If something does not come up, [docs/troubleshooting.md](docs/troubleshooting.md) lists the symptoms seen while building this quickstart with the command that confirms each and the fix.
+`NS=${PROJECT} scripts/demo-preflight.sh -f <your values file>` checks models, the connectivity test pod and the n8n webhooks at any time. If something does not come up, [docs/troubleshooting.md](docs/troubleshooting.md) lists the symptoms seen while building this quickstart with the command that confirms each and the fix.
 
 1. Check that all pods are running. Model pods can take several minutes to download weights on first start.
 
@@ -351,10 +266,10 @@ oc get pods -n ${PROJECT}
 echo https://$(oc get route/frontend -n ${PROJECT} --template='{{.spec.host}}')
 ```
 
-3. Run the Helm test. It checks the health endpoint of every enabled service and sends one chat completion to the LLM.
+3. Run the connectivity test. It checks every enabled service, lists the models, calls embeddings and sends one chat completion to the LLM (for Argo CD installs use `scripts/test-services.sh`).
 
 ```bash
-helm test assistant --namespace ${PROJECT}
+helm test assistant --namespace ${PROJECT} --logs
 ```
 
 4. Load the sample documents with `NS=${PROJECT} scripts/load-sample-docs.sh`. It uploads the policies in `data/sample-docs/` to the `documents` bucket and the invoices and contracts to `inbox`; the ingestion and classification workflows in n8n run within a few seconds. You can also upload single files through the MinIO console.
@@ -431,6 +346,7 @@ A presenter script with timings, exact questions and expected answers is in [doc
 │   ├── import-workflows.sh       # Updates the n8n workflows through the public API
 │   └── load-sample-docs.sh       # Uploads the sample documents into MinIO
 ├── docs/
+│   ├── deployment.md             # Manual Helm steps, Argo CD, third-party keys, generated secrets
 │   ├── development.md            # Running the services locally, tests, images, documents, workflows
 │   ├── demo-script.md            # 15-minute presenter script with expected answers
 │   ├── troubleshooting.md        # Symptoms, causes, checks and fixes from the demo cluster
@@ -459,6 +375,8 @@ A presenter script with timings, exact questions and expected answers is in [doc
 
 ## Technical details
 
+### How it works
+
 **Model endpoints.** Every model is consumed through an OpenAI-compatible API: chat completions for the LLM and guardrails, audio transcriptions for Whisper, audio speech for TTS, and embeddings for the indexing model. Each model has a `deploy` toggle plus `endpoint` and `servedModelName` values; API keys live in the models Secret. Switching from a local InferenceService to a MaaS endpoint, or to a frontier provider as a fallback, is a values change with no code change. In-cluster endpoints that OpenShift AI serves over TLS are trusted through the OpenShift service CA, which every pod already mounts.
 
 **RAG API.** A FastAPI service that owns retrieval, memory, guardrails, classification, and tickets so that text chat, voice, and n8n all share one grounded answer path. Main endpoints: `POST /v1/chat` (grounded answer with citations and memory), `POST /v1/search` (retrieval only), `POST /v1/classify` (document type and field extraction to JSON), `POST /v1/tickets` and `PATCH /v1/tickets/{id}` (service request state), `GET /v1/voice/token` (LiveKit room token for the browser).
@@ -476,6 +394,14 @@ A presenter script with timings, exact questions and expected answers is in [doc
 **Workflows.** The seven n8n workflows (chat, ingestion, classification, request approval, transcript archival, SLA escalation, knowledge-gap digest) call the RAG API and ingestion service by their in-cluster service names. n8n imports them on first start; the Slack credential is created from the integrations secret, the Google Docs credential is added once in the n8n UI. The **Archive transcript** button in the chat header hands the current conversation to the archival workflow through the RAG API.
 
 **Naming.** Application services use fixed names (`frontend`, `rag-api`, `ingestion`, `voice-agent`, `postgres`, `qdrant`, `minio`, `n8n`, `livekit`) so that workflows and configuration are stable regardless of the Helm release name. Deploy one release per project.
+
+### Configuration
+
+Everything is a Helm value: models (`deploy` per model, or an `endpoint`), guardrails provider, avatar provider and voice, workflow import policy, sizing. The reference with defaults is [chart/README.md](chart/README.md); the services read the same settings as environment variables from the `assistant-config` config map and the secrets, so a value change restarts only the pods that use it.
+
+### Local development
+
+[docs/development.md](docs/development.md) explains how to run each service on a laptop against a deployed cluster, the tests CI runs, image builds, the sample documents and the workflow files.
 
 ## Tags
 

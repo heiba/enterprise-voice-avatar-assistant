@@ -7,7 +7,7 @@ NS="${NS:-$(oc project -q)}"
 N8N="https://$(oc get route n8n -n "$NS" -o jsonpath='{.spec.host}')"
 SID="${1:-}"
 if [ -z "$SID" ]; then
-  SID=$(oc exec deploy/rag-api -n "$NS" -- python -c "from app import memory; rows = memory.run('SELECT session_id FROM conversations ORDER BY updated_at DESC LIMIT 1', fetch=True) or []; print(rows[0]['session_id'] if rows else '')")
+  SID=$(oc exec deploy/rag-api -n "$NS" -- .venv/bin/python -c "from app import memory; rows = memory.run('SELECT session_id FROM conversations ORDER BY updated_at DESC LIMIT 1', fetch=True) or []; print(rows[0]['session_id'] if rows else '')")
   [ -n "$SID" ] || { echo "no conversation found; pass a session id"; exit 1; }
   echo "newest session: $SID"
 fi

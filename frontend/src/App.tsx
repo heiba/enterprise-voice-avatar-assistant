@@ -73,6 +73,7 @@ export default function App() {
           message: question,
           session_id: sessionId,
           user_id: userName.trim() || undefined,
+          user_name: userName.trim() || undefined,
         });
         setMessages((m) =>
           m.map((msg) =>
@@ -139,7 +140,7 @@ export default function App() {
       blocked: turn.blocked,
       voice: true,
       ticket: turn.ticket ?? null,
-      notice: !turn.question,
+      notice: turn.kind === "notice" || (!turn.kind && !turn.question),
     });
     setMessages((m) => [...m, ...entries]);
     setCitations(turn.citations);
@@ -165,7 +166,7 @@ export default function App() {
           <VoicePanel sessionId={sessionId} userName={userName} onAssistantTurn={onAssistantTurn} onActiveChange={setVoiceActive} />
         </section>
         <section className="chat-column">
-          <ChatPanel messages={messages} busy={busy} onSend={send} onCite={setSelected} onSelectMessage={showCitations} />
+          <ChatPanel messages={messages} busy={busy} userName={userName} onSend={send} onCite={setSelected} onSelectMessage={showCitations} />
         </section>
         <aside className="citations-column">
           <CitationsPanel citations={citations} selected={selected} onSelect={setSelected} />

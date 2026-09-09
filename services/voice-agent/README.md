@@ -30,7 +30,7 @@ the LiveKit server and joins every new room. For each user turn:
 | `AVATAR_FACES` | `[]` | JSON list of `{id, name, gender\|voice}`; the browser's choice arrives as the participant attribute `avatar_face` |
 | `HEDRA_API_KEY`, `HEDRA_AVATAR_IMAGE` | unset | Hedra avatar |
 | `SERVICE_CA_FILE` | unset | extra CA for in-cluster TLS endpoints |
-| `GREETING`, `MIN_ENDPOINTING_DELAY` | see `app/config.py` | |
+| `GREETING`, `GREETING_NAMED`, `MIN_ENDPOINTING_DELAY` | see `app/config.py` | `GREETING_NAMED` takes `{name}`, the first name from the token's display name |
 | `AGENT_PORT` | `8081` | health endpoint of the worker |
 
 ## Run locally

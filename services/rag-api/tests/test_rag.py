@@ -38,6 +38,14 @@ def test_messages_include_history_and_voice_style():
     assert messages[-1] == {"role": "user", "content": "How often?"}
 
 
+def test_messages_name_the_person_when_known():
+    named = rag.build_messages("How often?", hits(), [], "text", None, "Joe Bloggs")
+    assert "You are talking to Joe Bloggs. Address them as Joe" in named[0]["content"]
+    anonymous = rag.build_messages("How often?", hits(), [], "text", None, None)
+    assert "You are talking to" not in anonymous[0]["content"]
+    assert rag.first_name("  Joe Bloggs ") == "Joe" and rag.first_name("   ") is None
+
+
 def test_citation_markers_are_extracted_within_range():
     assert rag.cited_numbers("Every 90 days [2]. Also [1][7].", max_n=2) == {1, 2}
 

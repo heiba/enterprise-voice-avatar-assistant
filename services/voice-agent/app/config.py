@@ -70,6 +70,11 @@ class Settings(BaseSettings):
         "Hello, I am the company assistant. Ask me about a policy, a procedure, or a request "
         "and I will answer from our documents."
     )
+    # Spoken instead of `greeting` when the person gave their name; {name} is their first name
+    greeting_named: str = (
+        "Hi {name}, welcome. I am the company assistant. Ask me about a policy, a procedure, "
+        "or a request and I will answer from our documents."
+    )
     instructions: str = (
         "You are a helpful voice assistant for employees. Keep answers short and natural to listen to."
     )

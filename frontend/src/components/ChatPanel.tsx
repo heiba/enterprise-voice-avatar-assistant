@@ -4,6 +4,7 @@ import type { ChatMessage } from "../types";
 interface Props {
   messages: ChatMessage[];
   busy: boolean;
+  userName?: string;
   onSend: (text: string) => void;
   onCite: (n: number) => void;
   onSelectMessage: (message: ChatMessage) => void;
@@ -43,7 +44,8 @@ function AnswerText({ text, onCite }: { text: string; onCite: (n: number) => voi
   );
 }
 
-export function ChatPanel({ messages, busy, onSend, onCite, onSelectMessage }: Props) {
+export function ChatPanel({ messages, busy, userName, onSend, onCite, onSelectMessage }: Props) {
+  const firstName = (userName ?? "").trim().split(/\s+/)[0] ?? "";
   const [draft, setDraft] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -70,6 +72,7 @@ export function ChatPanel({ messages, busy, onSend, onCite, onSelectMessage }: P
       <div className="messages" aria-live="polite">
         {messages.length === 0 && (
           <div className="empty">
+            <p className="welcome">{firstName ? `Hi ${firstName}, welcome.` : "Welcome."}</p>
             <p>Ask about a policy, a procedure, or a document that has been uploaded to the assistant.</p>
             <div className="suggestions">
               {SUGGESTIONS.map((s) => (

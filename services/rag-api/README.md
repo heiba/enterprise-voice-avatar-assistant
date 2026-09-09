@@ -7,7 +7,7 @@ the voice agent, and the n8n workflows.
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/v1/chat` | `{"message", "session_id"?, "user_id"?, "mode": "text"\|"voice"}` → answer, citations, guardrail info |
+| POST | `/v1/chat` | `{"message", "session_id"?, "user_id"?, "user_name"?, "mode": "text"\|"voice"}` → answer, citations, guardrail info; `user_name` lets the assistant address the person by first name |
 | POST | `/v1/search` | retrieval only: `{"query", "top_k"?}` → hits with source, page, snippet, score |
 | GET | `/v1/sessions/{id}/messages` | conversation history with citations |
 | GET | `/v1/sessions/{id}/notifications` | undelivered outcome notices for the session (ticket decisions), newest per ticket |

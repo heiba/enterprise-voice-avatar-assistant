@@ -33,6 +33,26 @@ def user_id_from_identity(identity: str | None) -> str | None:
     return identity.removeprefix(IDENTITY_PREFIX)
 
 
+def display_name(participant: Any) -> str | None:
+    """The name the person typed in the UI (the token's display name), or None for guests, whose
+    token repeats the identity (user-guest) as the name."""
+    name = str(getattr(participant, "name", "") or "").strip()
+    identity = str(getattr(participant, "identity", "") or "").strip()
+    if not name or name == identity or name.startswith(IDENTITY_PREFIX):
+        return None
+    return name
+
+
+def first_name(name: str | None) -> str | None:
+    parts = (name or "").split()
+    return parts[0] if parts else None
+
+
+def greeting_for(name: str | None, generic: str, named: str) -> str:
+    first = first_name(name)
+    return named.format(name=first) if first else generic
+
+
 def last_user_text(chat_ctx: Any) -> str:
     """Return the text of the most recent user message in a LiveKit ChatContext (or anything shaped like it)."""
     items = getattr(chat_ctx, "items", None) or getattr(chat_ctx, "messages", None) or []
@@ -51,11 +71,13 @@ def last_user_text(chat_ctx: Any) -> str:
     return ""
 
 
-def citations_payload(reply: dict[str, Any], question: str | None = None) -> bytes:
-    """Data-channel message for the frontend: the transcribed question, the answer, and its citations."""
+def citations_payload(reply: dict[str, Any], question: str | None = None, kind: str = "answer") -> bytes:
+    """Data-channel message for the frontend: the transcribed question, the answer, and its citations.
+    kind distinguishes answers from the greeting and from outcome notices."""
     return json.dumps(
         {
             "type": "assistant.answer",
+            "kind": kind,
             "session_id": reply.get("session_id"),
             "question": question or "",
             "answer": reply.get("answer", ""),

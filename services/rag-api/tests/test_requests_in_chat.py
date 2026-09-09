@@ -196,6 +196,7 @@ def test_notify_ticket_is_noop_without_session():
 def test_request_reply_wording():
     assert "needs approval" in rag.request_reply(make_ticket("pending_approval"))
     assert "No approval is needed" in rag.request_reply(make_ticket("approved"))
+    assert rag.request_reply(make_ticket("approved"), "Joe Bloggs").startswith("Joe, I've logged your request")
 
 
 def test_archive_session_calls_n8n(monkeypatch):

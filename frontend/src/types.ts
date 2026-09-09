@@ -92,6 +92,8 @@ export interface VoiceToken {
 /** Published by the voice agent on the room data channel (topic "assistant") after every answer. */
 export interface AssistantTurn {
   type: "assistant.answer";
+  /** answer (default), greeting, or notice (an outcome such as a ticket decision) */
+  kind?: "answer" | "greeting" | "notice";
   session_id: string | null;
   question: string;
   answer: string;

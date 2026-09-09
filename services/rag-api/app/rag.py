@@ -27,16 +27,31 @@ def build_context(hits: list[Hit]) -> str:
     return "\n\n".join(parts)
 
 
+def first_name(user_name: str | None) -> str | None:
+    """The first word of a display name, for greetings; None for empty or placeholder names."""
+    if not user_name:
+        return None
+    first = user_name.strip().split()[0] if user_name.strip() else ""
+    return first or None
+
+
 def build_messages(
     question: str,
     hits: list[Hit],
     history: list[dict[str, str]],
     mode: str,
     user_memory: dict[str, str] | None = None,
+    user_name: str | None = None,
 ) -> list[dict[str, str]]:
     system = settings.system_prompt.format(assistant_name=settings.assistant_name)
     if mode == "voice":
         system += VOICE_STYLE
+    name = first_name(user_name)
+    if name:
+        system += (
+            f"\n\nYou are talking to {user_name.strip()}. Address them as {name} where it reads naturally, "
+            "for example in a greeting or when confirming something, not in every sentence."
+        )
     if user_memory:
         facts = "\n".join(f"- {k}: {v}" for k, v in user_memory.items())
         system += f"\n\nWhat you remember about this user:\n{facts}"
@@ -58,9 +73,10 @@ def retrieval_query(message: str, history: list[dict[str, str]]) -> str:
     return message
 
 
-def request_reply(ticket: Ticket) -> str:
+def request_reply(ticket: Ticket, user_name: str | None = None) -> str:
     """What the assistant says right after filing a request from the conversation."""
-    head = f"I've logged your request {ticket.ticket_ref}: {ticket.title.rstrip('.')}. "
+    name = first_name(user_name)
+    head = f"{name + ', ' if name else ''}I've logged your request {ticket.ticket_ref}: {ticket.title.rstrip('.')}. "
     detail = f"It's a {ticket.category or 'general'} request with {ticket.priority} priority"
     if ticket.status == "pending_approval":
         return head + detail + " and needs approval. I'll let you know here as soon as it's decided."
@@ -90,7 +106,7 @@ def file_request(request: ChatRequest, session_id: str, info: GuardrailInfo) -> 
         return ChatResponse(
             session_id=session_id, answer=text, citations=[], guardrail=info, model=settings.llm_model
         )
-    text = request_reply(ticket)
+    text = request_reply(ticket, request.user_name)
     memory.append(session_id, "user", request.message)
     memory.append(session_id, "assistant", text)
     log.info(
@@ -140,7 +156,7 @@ def answer(request: ChatRequest) -> ChatResponse:
     knowledge_gaps.record(session_id, request.message, top_score, len(hits))
 
     user_memory = memory.get_user_memory(request.user_id) if request.user_id else {}
-    messages = build_messages(request.message, hits, history, request.mode, user_memory)
+    messages = build_messages(request.message, hits, history, request.mode, user_memory, request.user_name)
 
     completion = clients.llm().chat.completions.create(
         model=settings.llm_model,

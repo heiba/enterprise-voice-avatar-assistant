@@ -20,7 +20,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function chat(body: { message: string; session_id?: string; user_id?: string; mode?: "text" | "voice" }) {
+export function chat(body: { message: string; session_id?: string; user_id?: string; user_name?: string; mode?: "text" | "voice" }) {
   return request<ChatResponse>("/v1/chat", { method: "POST", body: JSON.stringify(body) });
 }
 

@@ -16,6 +16,18 @@ def test_session_and_user_ids():
     assert helpers.user_id_from_identity(None) is None
 
 
+def test_display_name_and_greeting():
+    from types import SimpleNamespace
+
+    joe = SimpleNamespace(identity="user-joe-bloggs", name="Joe Bloggs")
+    guest = SimpleNamespace(identity="user-guest", name="user-guest")
+    assert helpers.display_name(joe) == "Joe Bloggs"
+    assert helpers.display_name(guest) is None
+    assert helpers.display_name(None) is None
+    assert helpers.greeting_for("Joe Bloggs", "Hello.", "Hi {name}.") == "Hi Joe."
+    assert helpers.greeting_for(None, "Hello.", "Hi {name}.") == "Hello."
+
+
 def test_last_user_text_prefers_text_content_and_falls_back_to_content_parts():
     ctx = SimpleNamespace(
         items=[

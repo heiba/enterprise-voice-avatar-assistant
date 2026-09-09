@@ -21,6 +21,8 @@ class ChatRequest(BaseModel):
         default=None, description="Conversation id; a new one is created when omitted"
     )
     user_id: str | None = None
+    # Display name of the person, used to address them; user_id stays the memory key
+    user_name: str | None = Field(default=None, max_length=80)
     mode: Literal["text", "voice"] = "text"
     top_k: int | None = Field(default=None, ge=1, le=20)
 

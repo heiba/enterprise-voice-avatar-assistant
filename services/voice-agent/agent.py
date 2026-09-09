@@ -62,11 +62,14 @@ def build_llm():
 
 
 class Assistant(Agent):
-    def __init__(self, room: rtc.Room, session_id: str, user_id: str | None) -> None:
+    def __init__(
+        self, room: rtc.Room, session_id: str, user_id: str | None, user_name: str | None = None
+    ) -> None:
         super().__init__(instructions=settings.instructions)
         self._room = room
         self._session_id = session_id
         self._user_id = user_id
+        self._user_name = user_name
 
     async def llm_node(self, chat_ctx, tools, model_settings):
         """Replace the LLM step with a call to the RAG API so voice and text share one answer path."""
@@ -74,7 +77,7 @@ class Assistant(Agent):
         if not text:
             return
         try:
-            reply = await rag_client.chat(text, self._session_id, self._user_id)
+            reply = await rag_client.chat(text, self._session_id, self._user_id, self._user_name)
         except Exception:
             log.exception("RAG API call failed for session %s", self._session_id)
             yield "Sorry, I could not reach the knowledge base just now. Please try again in a moment."
@@ -102,6 +105,7 @@ async def entrypoint(ctx: JobContext) -> None:
     participant = await ctx.wait_for_participant()
     session_id = helpers.session_id_from_room(ctx.room.name)
     user_id = helpers.user_id_from_identity(participant.identity if participant else None)
+    user_name = helpers.display_name(participant)
     face = faces.select(faces.requested_face(participant))
     log.info(
         "joined room %s (session %s) for participant %s; face=%s voice=%s",
@@ -152,12 +156,22 @@ async def entrypoint(ctx: JobContext) -> None:
             ctx.delete_room()
 
     await session.start(
-        agent=Assistant(ctx.room, session_id, user_id),
+        agent=Assistant(ctx.room, session_id, user_id, user_name),
         room=ctx.room,
         room_output_options=RoomOutputOptions(audio_enabled=avatar is None),
     )
-    if settings.greeting:
-        await session.say(settings.greeting, allow_interruptions=True)
+    greeting = helpers.greeting_for(user_name, settings.greeting, settings.greeting_named)
+    if greeting:
+        try:
+            # the greeting also goes to the chat transcript, like every spoken answer
+            await ctx.room.local_participant.publish_data(
+                helpers.citations_payload({"session_id": session_id, "answer": greeting}, kind="greeting"),
+                reliable=True,
+                topic="assistant",
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("could not publish the greeting to the room: %s", exc)
+        await session.say(greeting, allow_interruptions=True)
 
     notices = asyncio.create_task(notification_loop(session, ctx.room, session_id))
 
@@ -184,7 +198,7 @@ async def notification_loop(session: AgentSession, room: rtc.Room, session_id: s
             try:
                 await rag_client.ack_notifications(session_id, [int(notice["id"])])
                 await room.local_participant.publish_data(
-                    helpers.citations_payload({"session_id": session_id, "answer": text}),
+                    helpers.citations_payload({"session_id": session_id, "answer": text}, kind="notice"),
                     reliable=True,
                     topic="assistant",
                 )

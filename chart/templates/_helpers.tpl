@@ -66,7 +66,7 @@ Image reference for an application component. Call with (dict "root" $ "name" "<
 {{- if .override -}}
 {{ .override }}
 {{- else -}}
-{{ printf "%s/assistant-%s:%s" .root.Values.images.registry .name .root.Values.images.tag }}
+{{ printf "%s/enterprise-voice-avatar-assistant-%s:%s" .root.Values.images.registry .name .root.Values.images.tag }}
 {{- end -}}
 {{- end -}}
 

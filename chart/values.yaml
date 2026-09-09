@@ -17,8 +17,10 @@ global:
   storageClassName: ""
   imagePullPolicy: IfNotPresent
 
-# Application images built from this repository (frontend, rag-api, ingestion,
-# voice-agent). Each component can override its full image reference.
+# Application images built from this repository and published by CI as
+# <registry>/enterprise-voice-avatar-assistant-<service>:<tag> for frontend,
+# rag-api, ingestion and voice-agent. Each component can override its full
+# image reference with its own `image` value.
 images:
   registry: quay.io/rh-ai-quickstart
   tag: latest

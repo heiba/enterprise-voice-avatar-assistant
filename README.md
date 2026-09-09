@@ -430,7 +430,7 @@ A presenter script with timings, exact questions and expected answers is in [doc
 │   ├── ingestion/                # Docling parsing, chunking, embeddings, Qdrant upsert (FastAPI)
 │   └── voice-agent/              # LiveKit Agents worker (Whisper, RAG API, Kokoro, avatar providers)
 ├── data/sample-docs/             # Synthetic Example Corp documents (Markdown sources in src/, rendered DOCX and PDF)
-└── .github/workflows/            # CI: helm lint and tests; image builds published to ghcr.io
+└── .github/workflows/            # CI: helm lint and tests; image builds published to quay.io/rh-ai-quickstart
 ```
 
 ## References

@@ -4,10 +4,10 @@ global:
   domain: apps.ocp.6s896.sandbox2112.opentlc.com
 
 # Application images are built by .github/workflows/build-images.yaml and pushed
-# to GitHub's container registry. The workflow rewrites the per-service image
-# tags below after every successful build.
+# to quay.io/rh-ai-quickstart. The workflow rewrites the per-service image
+# references below after every successful build (pinned by commit).
 images:
-  registry: ghcr.io/rh-ai-quickstart
+  registry: quay.io/rh-ai-quickstart
 
 voiceAgent:
   enabled: true

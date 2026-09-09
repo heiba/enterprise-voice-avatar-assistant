@@ -417,6 +417,10 @@ A presenter script with timings, exact questions and expected answers is in [doc
 │   ├── check-prereqs.sh          # Verifies cluster prerequisites and permissions
 │   ├── create-secrets.sh         # Creates the Secrets the chart expects
 │   ├── test-services.sh          # Runs the connectivity test pod (also for Argo CD installs)
+│   ├── demo-preflight.sh         # Models, Argo CD status, test pod and n8n webhooks before a demo
+│   ├── check-index.sh            # Indexed documents, duplicates, stale-text search
+│   ├── n8n-executions.sh         # Recent n8n executions with node errors (needs an API key)
+│   ├── cluster-versions.sh       # Versions behind the tested-versions table
 │   ├── import-workflows.sh       # Updates the n8n workflows through the public API
 │   └── load-sample-docs.sh       # Uploads the sample documents into MinIO
 ├── docs/

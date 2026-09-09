@@ -4,7 +4,7 @@ Fifteen minutes, mixed audience. Each step has the talking point for decision ma
 
 ## Before you start (ten minutes before)
 
-- `NS=<project> scripts/test-services.sh`, run from the repository clone (or by full path, for example `~/enterprise-voice-avatar-assistant/scripts/test-services.sh`), prints OK for every line. It needs `helm` on the PATH and takes up to a minute.
+- `NS=<project> scripts/demo-preflight.sh -f <your values file>`, run from the repository clone, ends with `PRE-FLIGHT OK`: models Ready, the connectivity test pod green, every n8n webhook registered. It needs `helm` on the PATH and takes about a minute.
 - All InferenceServices show READY True: `oc get isvc -n <project>`.
 - The sample documents are loaded (`scripts/load-sample-docs.sh`) and `#assistant-ingestion` shows their "done" messages.
 - Browser windows ready: **A** the frontend (hard refresh, microphone allowed), **B** n8n Executions, **C** Slack with the five `#assistant-*` channels, **D** the Google Drive transcripts folder, **E** the OpenShift AI dashboard, Models tab. A terminal on the bastion or your laptop for two commands.

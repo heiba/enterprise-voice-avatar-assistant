@@ -115,17 +115,17 @@ button.cite:hover { border-color: var(--accent); }
 .voice-state.state-speaking { border-color: var(--accent); color: var(--accent); }
 .voice-state.state-thinking { border-color: var(--warning); color: var(--warning); }
 .voice-face { color: var(--muted); }
-.face-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.face-picker { display: flex; flex-wrap: wrap; gap: 10px; }
 .face-picker-label { flex-basis: 100%; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-/* the faces share one row: equal widths, names ellipsize instead of wrapping to a second line */
-.face-option { flex: 1 1 calc(25% - 6px); min-width: 110px; display: flex; align-items: center; gap: 8px; padding: 5px 10px 5px 5px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); text-align: left; }
+/* four cards share one row: equal widths, the picture large, the name ellipsizes rather than wrapping */
+.face-option { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 8px 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface-2); }
 .face-option:hover { border-color: var(--border-strong); background: var(--surface-3); }
 .face-option.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.face-thumb { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center; object-fit: cover; font-weight: 700; font-size: 0.9rem; color: var(--text); background: var(--surface-3); border: 1px solid var(--border-strong); }
+.face-thumb { width: 72px; height: 72px; flex: none; border-radius: 50%; display: grid; place-items: center; object-fit: cover; font-weight: 700; font-size: 1.6rem; color: var(--text); background: var(--surface-3); border: 2px solid var(--border-strong); }
 .face-thumb.female { color: #ff8fb1; background: #ea4b7126; border-color: #ea4b7180; }
 .face-thumb.male { color: #7cc4ff; background: #3b8ee826; border-color: #3b8ee880; }
 .face-option.selected .face-thumb { border-color: var(--accent); }
-.face-name { font-size: 0.9rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.face-name { max-width: 100%; font-size: 0.92rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .voice-tag { background: var(--user); color: var(--text); }
 .ticket-tag { background: var(--accent-soft); color: var(--text); }
 .notice-tag { background: var(--success-soft); color: var(--success); }

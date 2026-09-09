@@ -41,10 +41,9 @@ Beyond question answering, the assistant handles two workflow patterns common to
 
 ### See it in action
 
-Demo links will be added once the stack has been validated on a cluster.
+![The assistant answering by voice: the avatar on the left, the chat with suggested questions in the middle, the Sources panel on the right, and the served models in the status bar](docs/images/frontend-voice-avatar.png)
 
-- Interactive demo (Arcade): coming soon
-- Video walkthrough: coming soon
+The avatar speaks the answers while the chat shows the same text with its citations; the status bar lists the models behind the session (Llama 3.1 8B, BGE-M3, Granite Guardian) served on OpenShift AI. A presenter script with timings and expected answers is in [docs/demo-script.md](docs/demo-script.md).
 
 ### Architecture diagrams
 

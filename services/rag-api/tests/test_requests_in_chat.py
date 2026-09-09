@@ -78,12 +78,14 @@ def test_chat_files_a_request(monkeypatch):
                 "session_id": "s1",
                 "user_id": "mohamed",
                 "mode": "voice",
+                "user_name": "Joe Bloggs",
             },
         ).json()
     assert body["ticket"]["ticket_ref"] == "REQ-000007"
     assert "REQ-000007" in body["answer"] and "needs approval" in body["answer"]
     assert body["citations"] == []
     assert filed[0].channel == "voice" and filed[0].session_id == "s1"
+    assert filed[0].requester == "Joe Bloggs"
 
 
 def test_chat_without_ticket_backend(monkeypatch):
@@ -196,7 +198,9 @@ def test_notify_ticket_is_noop_without_session():
 def test_request_reply_wording():
     assert "needs approval" in rag.request_reply(make_ticket("pending_approval"))
     assert "No approval is needed" in rag.request_reply(make_ticket("approved"))
-    assert rag.request_reply(make_ticket("approved"), "Joe Bloggs").startswith("Joe, I've logged your request")
+    assert rag.request_reply(make_ticket("approved"), "Joe Bloggs").startswith(
+        "Joe, I've logged your request"
+    )
 
 
 def test_archive_session_calls_n8n(monkeypatch):

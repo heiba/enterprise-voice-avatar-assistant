@@ -95,6 +95,7 @@ def file_request(request: ChatRequest, session_id: str, info: GuardrailInfo) -> 
                 text=request.message,
                 session_id=session_id,
                 user_id=request.user_id,
+                requester=request.user_name or None,  # the display name shows on the approval card
                 channel="voice" if request.mode == "voice" else "chat",
             )
         )

@@ -94,7 +94,7 @@
           "value": "#assistant-tickets"
         },
         "otherOptions": {},
-        "text": "=:rotating_light: *SLA escalation* — {{ $('Split escalations').first().json.ticket_ref }} ({{ $('Split escalations').first().json.title }}) has been pending approval for {{ $('Split escalations').first().json.pending_minutes }} minutes. Priority escalated from {{ $json.old_priority }} to {{ $json.new_priority }}. Requester: {{ $('Split escalations').first().json.requester }}."
+        "text": "=:rotating_light: *SLA escalation* — {{ $('Split escalations').item.json.ticket_ref }} ({{ $('Split escalations').item.json.title }}) has been pending approval for {{ $('Split escalations').item.json.pending_minutes }} minutes. Priority escalated from {{ $json.old_priority }} to {{ $json.new_priority }}. Requester: {{ $('Split escalations').item.json.requester }}."
       },
       "id": "a1b2c3d4-1111-5555-aaaa-000000000006",
       "name": "Notify escalation",

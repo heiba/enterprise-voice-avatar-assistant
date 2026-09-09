@@ -22,16 +22,16 @@ voiceAgent:
     - id: r67d1c9cac37
       name: Jackie
       gender: female
-  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-voice-agent:sha-480224d
+  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-voice-agent:sha-c7bce3f
 frontend:
   enabled: true
-  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-frontend:sha-480224d
+  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-frontend:sha-c7bce3f
 ragApi:
   enabled: true
-  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-rag-api:sha-480224d
+  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-rag-api:sha-c7bce3f
 ingestion:
   enabled: true
-  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-ingestion:sha-480224d
+  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-ingestion:sha-c7bce3f
 
 models:
   tts:

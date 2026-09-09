@@ -219,7 +219,7 @@ Before deploying, ensure you have:
 - `helm` installed
 - Run `scripts/check-prereqs.sh` after logging in; it reports anything missing and which permissions you lack
 - Model endpoints ready: either existing OpenAI-compatible endpoints (MaaS) with API keys, or GPU capacity to deploy models with the chart
-- Optional: a Slack bot token, a Google service account JSON key, an avatar provider API key, and an ElevenLabs API key
+- Optional: a Slack bot token, a Google Cloud OAuth client for Google Docs, an avatar provider key (Tavus, Simli or Hedra), and an ElevenLabs key; see [Third-party accounts and keys](#third-party-accounts-and-keys)
 
 ### Installation
 

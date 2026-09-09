@@ -463,7 +463,7 @@ The demo follows one storyline, from deployment to portability. Each step builds
 
 - **Title:** Deploy an enterprise voice and avatar assistant on OpenShift AI
 - **Description:** Ground a voice-enabled, avatar-fronted assistant in your company documents with RAG, n8n workflows, and models served on Red Hat OpenShift AI.
-- **Industry:** Media and IT services
+- **Industry:** Cross-industry
 - **Product:** Red Hat OpenShift AI
 - **Use case:** Productivity, automation
 - **Partner:** n8n

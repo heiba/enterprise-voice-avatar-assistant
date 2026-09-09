@@ -4,7 +4,7 @@ Document owner: IT Service Management. Version 5.0, effective 1 January 2026. Al
 
 ## Service desk hours
 
-Monday to Friday 08:00 to 18:00 Central European Time for Amsterdam and Berlin, 08:00 to 18:00 Irish time for Dublin. On-call support outside these hours applies to Sev 1 and Sev 2 incidents only, as defined in the IT Incident Response Procedure.
+Monday to Friday 08:00 to 18:00 local time at each office. On-call support outside these hours applies to Sev 1 and Sev 2 incidents only, as defined in the IT Incident Response Procedure.
 
 ## Services
 

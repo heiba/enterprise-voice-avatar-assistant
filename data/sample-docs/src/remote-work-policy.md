@@ -1,6 +1,6 @@
 # Example Corp Remote Work Policy
 
-Document owner: People Operations. Version 3.1, effective 1 February 2026. Applies to all employees of Example Corp in the Netherlands, Ireland, and Germany.
+Document owner: People Operations. Version 3.1, effective 1 February 2026. Applies to all employees of Example Corp.
 
 ## Purpose
 
@@ -8,13 +8,13 @@ This policy sets out who may work remotely, how often, and what is expected of r
 
 ## Eligibility
 
-- Employees are eligible for remote work after completing their probation period (six months in the Netherlands, six months in Ireland and Germany).
+- Employees are eligible for remote work after completing their probation period (six months).
 - Roles that require physical presence, such as facilities, reception, and on-site client engineering, are not eligible for regular remote work. Occasional remote days may be agreed with the manager.
 - Managers approve remote work arrangements in the HR portal at `hr.example.corp`. Arrangements are reviewed every twelve months.
 
 ## How much remote work is allowed
 
-- Employees may work remotely up to **three days per week**. At least two days per week are worked from the employee's home office location (Amsterdam, Dublin, or Berlin).
+- Employees may work remotely up to **three days per week**. At least two days per week are worked from the employee's assigned office.
 - Core hours are **10:00 to 15:00 local time**. Employees must be reachable on Slack and email during core hours.
 - Working from another country is allowed for up to **20 working days per calendar year** and requires written approval from the manager and People Operations at least two weeks in advance, because of tax and social security rules.
 

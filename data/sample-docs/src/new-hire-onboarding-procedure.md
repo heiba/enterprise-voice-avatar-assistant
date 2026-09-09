@@ -10,7 +10,7 @@ Onboarding covers the period from signing the contract to the end of the probati
 
 - People Operations sends the welcome pack and collects the documents required for payroll and the right to work within **five business days** of the signed contract.
 - IT creates the user account, mailbox, and Slack access **three business days** before the start date and ships the laptop **five business days** before the start date to remote hires.
-- Facilities orders the access badge and, for Amsterdam, a locker.
+- Facilities orders the access badge and, at the head office, a locker.
 - The hiring manager assigns an onboarding buddy from the same team.
 
 ## Day one
@@ -29,7 +29,7 @@ Onboarding covers the period from signing the contract to the end of the probati
 
 - 30-day check-in: manager and new hire review progress against the plan. People Operations sends a short survey.
 - 60-day check-in: mid-probation review with written feedback.
-- 90-day check-in: final probation assessment for Ireland and Germany. In the Netherlands the probation period is **six months**, so a further review takes place at month five.
+- 90-day check-in: final probation assessment where the probation period is three months. Where local law sets a **six-month** probation period, a further review takes place at month five.
 
 ## Roles and responsibilities
 

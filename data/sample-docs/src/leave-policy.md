@@ -12,13 +12,13 @@ Document owner: People Operations. Version 2.4, effective 1 January 2026. Local 
 
 ## Public holidays
 
-Public holidays follow the country of the employee's contract: the Netherlands, Ireland, or Germany (state of Berlin). The list is published in the HR portal each December.
+Public holidays follow the country of the employee's contract. The list is published in the HR portal each December.
 
 ## Sick leave
 
 - Employees who are unwell notify their manager by **09:30 local time** on the first day of absence, by phone or Slack, and record the absence in the HR portal.
 - A medical certificate is required from the **sixth consecutive calendar day** of absence, or earlier where local law requires it.
-- Sick pay follows local law and the employment contract. In the Netherlands Example Corp pays 100 percent of salary during the first year of illness.
+- Sick pay follows local law and the employment contract. Where local law allows, Example Corp pays 100 percent of salary during the first six months of illness.
 
 ## Parental and family leave
 

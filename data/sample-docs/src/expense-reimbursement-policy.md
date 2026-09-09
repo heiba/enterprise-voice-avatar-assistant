@@ -24,7 +24,7 @@ Expenses of a manager are approved by the manager's own manager. Nobody may appr
 - Book flights, trains, and hotels through the travel desk (Meridian Travel) so that bookings are invoiced to Example Corp directly.
 - Flights are booked in economy class. Business class is allowed for flights longer than **six hours** with department head approval.
 - Train travel in second class is the default for trips under four hours. First class is allowed when it is cheaper than the economy flight alternative.
-- Hotel rates are capped per night, excluding taxes: **Amsterdam EUR 180, Dublin EUR 190, Berlin EUR 150, other cities EUR 170**. Higher rates need department head approval before booking.
+- Hotel rates are capped per night, excluding taxes: **head office city EUR 180, all other cities EUR 190**. Higher rates need department head approval before booking.
 - Taxi and ride-hailing are reimbursed when public transport is not practical, for example late at night or when carrying equipment.
 - Private car use is reimbursed at **EUR 0.23 per kilometre**, plus parking and tolls with receipts.
 

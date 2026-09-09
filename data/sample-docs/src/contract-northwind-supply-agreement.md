@@ -1,14 +1,14 @@
 # Master Supply Agreement
 
-**Between:** Example Corp B.V., 200 Example Plaza, 1017 AB Amsterdam, the Netherlands ("Example Corp")
-**And:** Northwind Office Supplies Ltd., 12 Harbour Road, Dublin D02 X285, Ireland, VAT IE9876543A ("Supplier")
+**Between:** Example Corp, 200 Example Plaza, Example City ("Example Corp")
+**And:** Northwind Office Supplies Ltd., 12 Harbour Road, Port Town, tax ID EX-9876543 ("Supplier")
 
 **Agreement number:** MSA-2025-014
 **Effective date:** 1 January 2026
 
 ## 1. Scope
 
-The Supplier agrees to supply office equipment, IT peripherals, and consumables listed in the price list in Annex A to Example Corp's offices in Amsterdam, Dublin, and Berlin. Individual purchases are made through purchase orders referencing this agreement.
+The Supplier agrees to supply office equipment, IT peripherals, and consumables listed in the price list in Annex A to Example Corp's head office and regional offices. Individual purchases are made through purchase orders referencing this agreement.
 
 ## 2. Term
 
@@ -22,7 +22,7 @@ This agreement runs for **two years** from the effective date and renews automat
 
 ## 4. Prices and payment
 
-- Prices are as stated in Annex A, in euros, excluding VAT. The Supplier may propose price changes once per year with 60 days' notice; changes apply only to orders placed after the new price list is accepted by Example Corp.
+- Prices are as stated in Annex A, in euros, excluding sales tax. The Supplier may propose price changes once per year with 60 days' notice; changes apply only to orders placed after the new price list is accepted by Example Corp.
 - Invoices are issued on delivery and are payable within **30 days** of the invoice date (net 30) by bank transfer to the account stated on the invoice. Invoices must reference the purchase order number.
 - Late payments accrue interest at **2 percent per month** on the outstanding amount.
 
@@ -44,11 +44,11 @@ Either party may terminate this agreement with immediate effect by written notic
 
 ## 9. Governing law
 
-This agreement is governed by the laws of the Netherlands. Disputes are submitted to the competent court in Amsterdam.
+This agreement is governed by the law of the jurisdiction in which Example Corp has its registered seat. Disputes are submitted to the competent court there.
 
 ## Signatures
 
-For Example Corp B.V.: Elena Marchetti, Head of Procurement, 12 December 2025
+For Example Corp: Elena Marchetti, Head of Procurement, 12 December 2025
 For Northwind Office Supplies Ltd.: Aoife Brennan, Commercial Director, 15 December 2025
 
 *This is a synthetic document created for demonstration purposes. The companies and people are fictional.*

@@ -21,7 +21,7 @@ Every employee also receives a headset and may request one docking station and o
 
 1. Open the IT service portal at `it.example.corp` and choose *Request equipment*, or describe the need to the assistant. The request is logged as a ticket with a reference such as REQ-000123.
 2. The service desk classifies the request. Standard-profile devices for eligible roles are fulfilled without further approval. Power-profile devices, non-standard models, and any single item above **EUR 2,000** need approval from the department head.
-3. Approved standard devices are delivered within **three business days** in Amsterdam, Dublin, and Berlin, and within ten business days to remote employees in other locations.
+3. Approved standard devices are delivered within **three business days** to the head office and the regional offices, and within ten business days to remote employees.
 4. The employee confirms receipt in the portal. The asset is registered to the employee in the asset inventory.
 
 ## Damaged, lost, or stolen devices

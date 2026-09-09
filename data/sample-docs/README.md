@@ -1,9 +1,6 @@
 # Sample documents
 
-A synthetic document set for the demo: **Example Corp**, an IT services and digital
-media company headquartered in Amsterdam with offices in Dublin and Berlin and
-about 800 employees. Nothing here is real company data; every company, person,
-bank account, and number is fictional.
+A synthetic document set for the demo: **Example Corp**, a mid-sized company with a head office, regional offices and about 800 employees. The documents deliberately name no industry or country, so the assistant can stand in for any organization. Nothing here is real company data; every company, person, bank account, and number is fictional.
 
 The Markdown sources live in `src/`. `scripts/build-sample-docs.sh` renders the
 demo set from them as a mix of Markdown, DOCX (pandoc), and PDF (LibreOffice), so
@@ -15,7 +12,7 @@ the ingestion pipeline exercises Docling on office formats, not only on text.
 |---|---|
 | `password-policy.md` | How often must administrator passwords be rotated? What happens after ten failed sign-in attempts? |
 | `remote-work-policy.docx` | How many days a week can I work remotely? Can I work from another country? |
-| `expense-reimbursement-policy.pdf` | What is the hotel cap in Dublin? Who approves an expense claim of 800 euros? |
+| `expense-reimbursement-policy.pdf` | What is the hotel rate cap outside the head office city? Who approves an expense claim of 800 euros? |
 | `it-equipment-procedure.docx` | What is the laptop replacement cycle? What should I do if my laptop is stolen? |
 | `new-hire-onboarding-procedure.pdf` | When is the laptop shipped to a new hire? Which trainings are mandatory in the first week? |
 | `incident-response-procedure.pdf` | What is the response time for a Sev 1 incident? How often are Sev 1 status updates sent? |
@@ -29,10 +26,10 @@ the ingestion pipeline exercises Docling on office formats, not only on text.
 | File | Expected classification |
 |---|---|
 | `invoice-INV-2026-0042.pdf` | invoice: Northwind Office Supplies, EUR 7,639.94, due 2026-09-27 |
-| `invoice-SKY-2026-0817.pdf` | invoice: Skyline Cloud Hosting, EUR 4,320.00, reverse-charge VAT |
+| `invoice-SKY-2026-0817.pdf` | invoice: Skyline Cloud Hosting, EUR 4,320.00, reverse-charge tax |
 | `invoice-MT-88213.md` | invoice: Meridian Travel, EUR 931.75 |
 | `contract-northwind-supply-agreement.pdf` | contract: master supply agreement, two-year term, net 30 |
-| `contract-managed-services-blue-harbor.docx` | contract: managed IT services, EUR 18,500 per month, 12-month term |
+| `contract-managed-services-blue-harbor.docx` | contract: managed IT services bought by Example Corp, EUR 18,500 per month, 12-month term |
 
 ## Loading the set into a deployment
 

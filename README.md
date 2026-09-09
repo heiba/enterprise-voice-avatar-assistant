@@ -51,17 +51,9 @@ After deployment you can:
 
 ### See it in action
 
-![A voice session: the avatar speaking on the left; in the chat, the greeting by name, a request made by voice, and the assistant's confirmation carrying the ticket reference REQ-000031 pending approval](docs/images/frontend-voice-avatar.png)
+![A voice session: the avatar speaking on the left; in the chat, the greeting by name, a typed question and the answer with two citation chips; the Sources panel on the right showing the password policy passage first; the served models in the status bar](docs/images/frontend-cited-answer-sources.png)
 
-The avatar greets the person by name, answers questions from the documents, and turns a spoken request into a ticket that goes to Slack for approval. Every answer comes with its sources:
-
-![A question typed in the chat during a voice session, the answer with two citation chips, and the Sources panel on the right showing the password policy passage first](docs/images/frontend-cited-answer-sources.png)
-
-Before a session, the person picks a face for the avatar; the voice follows the face:
-
-![The idle screen: face picker with four faces under the avatar frame, the welcome line "Hi Joe, welcome." with suggested questions in the chat, the empty Sources panel on the right, and the served models in the status bar](docs/images/frontend-welcome-face-picker.png)
-
-The status bar lists the models behind the session (Llama 3.1 8B, BGE-M3, Granite Guardian) served on OpenShift AI. A presenter script with timings and expected answers is in [docs/demo-script.md](docs/demo-script.md).
+The avatar greets the person by name and speaks the answers; the chat shows the same text with its citations, and the Sources panel shows the passages behind them. The status bar lists the models behind the session (Llama 3.1 8B, BGE-M3, Granite Guardian) served on OpenShift AI. A presenter script with timings and expected answers is in [docs/demo-script.md](docs/demo-script.md).
 
 ### Architecture diagrams
 

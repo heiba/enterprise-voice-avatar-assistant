@@ -53,7 +53,7 @@ After deployment you can:
 
 ![A voice session: the avatar speaking on the left; in the chat, the greeting by name, a typed question and the answer with two citation chips; the Sources panel on the right showing the password policy passage first; the served models in the status bar](docs/images/frontend-cited-answer-sources.png)
 
-The avatar greets the person by name and speaks the answers; the chat shows the same text with its citations, and the Sources panel shows the passages behind them. The status bar lists the models behind the session (Llama 3.1 8B, BGE-M3, Granite Guardian) served on OpenShift AI. A presenter script with timings and expected answers is in [docs/demo-script.md](docs/demo-script.md).
+The avatar greets the person by name and speaks the answers; the chat shows the same text with its citations, and the Sources panel shows the passages behind them. The status bar lists the models behind the session, served on OpenShift AI. A presenter script with timings and expected answers is in [docs/demo-script.md](docs/demo-script.md).
 
 ### Architecture diagrams
 
@@ -125,7 +125,7 @@ How data moves through the system:
 | Voice agent | Turn detection, transcription, spoken answers, avatar hand-off | LiveKit Agents worker | LiveKit, Whisper, RAG API, TTS, avatar provider |
 | LiveKit | WebRTC signaling and media, TURN over TLS | LiveKit server | browsers, voice agent, avatar provider |
 | n8n | Ingestion, classification, approvals, archival, SLA and digest workflows | n8n with the workflows shipped in the chart | RAG API, ingestion, Slack, Google Docs |
-| Models | Llama 3.1 8B (LLM), Whisper (STT), BGE-M3 (embeddings), Granite Guardian (guardrails), Kokoro (TTS) | vLLM on OpenShift AI (GPU); Kokoro on CPU | called over OpenAI-compatible APIs |
+| Models | Llama 3.1 8B or the cluster's Llama 3.2 3B (LLM), Whisper (STT), BGE-M3 (embeddings), Kokoro (TTS); Granite Guardian (guardrails) optional, off in the demo | vLLM on OpenShift AI (GPU); Kokoro on CPU | called over OpenAI-compatible APIs |
 | Datastores | PostgreSQL (conversations, memory, tickets, notices), Qdrant (vectors), MinIO (documents, inbox, transcripts) | Deployments with PVCs | the services above |
 
 ## Requirements
@@ -154,7 +154,7 @@ Models served on OpenShift AI, only if you deploy them with the chart instead of
 | Speech-to-text | Whisper large-v3-turbo on vLLM | 1 NVIDIA GPU with 16 GiB or more, or shared with the LLM | 2 vCPU / 8 GiB |
 | Text-to-speech | Kokoro or Orpheus | Optional. CPU is sufficient for demo load | 2 vCPU / 4 GiB |
 | Embeddings | BGE-M3 on vLLM | 1 NVIDIA GPU with 16 GiB or more (the chart default), or a CPU or remote endpoint for light load | 2 vCPU / 8 GiB |
-| Guardrails | Granite Guardian 3.3 8B on vLLM | 1 NVIDIA GPU with 24 GiB or more | 4 vCPU / 16 GiB |
+| Guardrails (optional, off by default) | Granite Guardian 3.3 8B on vLLM | 1 NVIDIA GPU with 24 GiB or more | 4 vCPU / 16 GiB |
 
 > **Note:** If all models are hosted remotely, on OpenShift AI in another project or at a Models-as-a-Service provider, this quickstart needs no GPU in the cluster.
 
@@ -267,18 +267,20 @@ repository.
    scripts/setup.sh
    ```
 
-   It prints the state of the cluster and of every step, then offers the next one. Press
-   Enter to run it, type a number to run a specific step, `q` to leave. `scripts/setup.sh --status`
-   only shows the state; `scripts/setup.sh --step N` runs one step again; `scripts/setup.sh --yes` accepts
-   every suggested answer. Progress and discovered facts are in `~/.assistant-setup/state.env`,
-   logs of each step in `~/.assistant-setup/logs/`.
+   It logs in if the bastion is not, prints the state of the cluster and of every step, then
+   runs the remaining steps one after the other. It stops only where it needs something from
+   you (the keys in step 5, the browser work in step 7) or when a step fails, with the reason
+   and the commands that show more; run it again and it resumes at that step.
+   `scripts/setup.sh --status` only shows the state, `scripts/setup.sh --step N` runs one step
+   again, `scripts/setup.sh --yes` skips the optional prompts. Progress and discovered facts are
+   in `~/.assistant-setup/state.env`, logs of each step in `~/.assistant-setup/logs/`.
 
 ### What the steps do
 
 | Step | What happens | Manual part |
 |---|---|---|
 | 1 Cluster and prerequisites | Checks the login and tools, the OpenShift and OpenShift AI versions, KServe, the operators, the GPUs, the deployed language model, the storage class | none |
-| 2 Deployment profile | Picks a profile from the GPU count (below) and asks for confirmation; with no GPU it asks for remote model endpoints | confirm |
+| 2 Deployment profile | Uses every GPU found (below). Not enough GPUs or GPU memory for the demo: it stops and states what is required, what the cluster has, and the options | none |
 | 3 Cluster bootstrap | `scripts/bootstrap-cluster.sh`: installs missing operators from `deploy/bootstrap/`, sets KServe to Managed, applies GPU time-slicing, lowers the deployed model's GPU memory share so the others fit, waits for Argo CD, creates the project with its Argo CD and dashboard labels | none, 5 to 15 min |
 | 4 TURN certificate | `scripts/setup-turn-tls.sh`: copies the cluster's wildcard certificate into the project for TURN over TLS, or asks Let's Encrypt for one through cert-manager if the cluster's is not trusted | an e-mail address in the cert-manager case |
 | 5 Keys and integrations | Creates `~/secrets.env` from `secrets.env.example`, prints what to create on your laptop (Slack app from `n8n/slack-app-manifest.json`, Tavus key, Google Cloud OAuth client and Drive folder) with the URLs that carry the cluster's domain, and asks for each value with hidden input. Nothing is typed into `oc` | the browser work |
@@ -294,9 +296,8 @@ run is recognised. Steps 5 and 7 are the only ones that need you in a browser.
 
 | GPUs on the cluster | Profile | Layout |
 |---|---|---|
-| none | `remote` | Every model is a remote OpenAI-compatible endpoint (Models-as-a-Service); the script asks for the URLs, model ids and keys |
-| 1 to 3 | `shared` | Each GPU is advertised four times through the GPU Operator's time-slicing; the language model gets 60% of a card (the deployed Llama 3.2 3B, or Llama 3.1 8B 4-bit deployed by the chart at 45%), Whisper 15%, BGE-M3 12%; Granite Guardian does not fit, so the guardrail provider is off |
-| 4 or more | `full` | One GPU per model server, guardrails on |
+| none | stop | The script stops: the demo needs one GPU with 24 GB for the language model, Whisper and BGE-M3. Remote OpenAI-compatible endpoints can replace them: `PROFILE=remote REMOTE_LLM_ENDPOINT=… REMOTE_LLM_MODEL=… REMOTE_STT_ENDPOINT=… REMOTE_EMB_ENDPOINT=… scripts/setup.sh`, with the keys in `~/secrets.env` |
+| 1 or more, 24 GB each | `gpu` | Every GPU is used and advertised four times through the GPU Operator's time-slicing; the language model gets 60% of a card (the deployed Llama 3.2 3B, or Llama 3.1 8B 4-bit deployed by the chart at 45%), Whisper 15%, BGE-M3 12%. No guardrail model runs in this demo. A GPU with less than 20 GB stops the script |
 
 The profile is a small JSON overlay (`~/.assistant-setup/values-object.json`) merged over
 `chart/values-demo-cluster.yaml` by Argo CD, so the values file in git stays cluster-neutral:

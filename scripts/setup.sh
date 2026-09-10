@@ -2,11 +2,16 @@
 # Interactive, resumable setup of the demo on a fresh cluster. Runs on the bastion host,
 # logged in to the cluster as an administrator, from a clone of this repository.
 #
-#   scripts/setup.sh            discover the cluster, show progress, run the next step (asks first)
+#   scripts/setup.sh            discover the cluster, show progress, run every remaining step in order;
+#                               it only stops for values it cannot know (keys, browser work) or on failure
 #   scripts/setup.sh --status   discovery and progress only, changes nothing
-#   scripts/setup.sh --step N   run step N (again)
-#   scripts/setup.sh --yes      accept every suggested answer (manual steps still ask for confirmation)
+#   scripts/setup.sh --step N   run step N (again), then stop
+#   scripts/setup.sh --yes      skip the optional prompts (n8n API key, Let's Encrypt e-mail)
 #   scripts/setup.sh --reset    forget the saved progress (the cluster is not touched)
+#
+# Without a GPU the script stops and says what the demo needs. To use remote model endpoints
+# instead, run it with PROFILE=remote and REMOTE_LLM_ENDPOINT, REMOTE_LLM_MODEL,
+# REMOTE_STT_ENDPOINT, REMOTE_EMB_ENDPOINT (and the keys in ~/secrets.env).
 #
 # Progress and discovered facts are kept in ~/.assistant-setup/state.env, logs in
 # ~/.assistant-setup/logs/. Every step checks the cluster before doing anything, so work
@@ -35,7 +40,7 @@ unsave() { { grep -v "^$1=" "$STATE" 2>/dev/null || true; } > "$STATE.tmp"; mv "
 mark() { save "STEP_$1_DONE" "$(date +%Y-%m-%dT%H:%M)"; }
 # ask <var> <prompt> <default>: interactive unless --yes; empty answer keeps the default
 ask() { local var=$1 prompt=$2 def=${3:-}; local ans; if [ "$YES" = 1 ] && [ -n "$def" ]; then ans=$def; else read -r -p "  $prompt${def:+ [$def]}: " ans; ans=${ans:-$def}; fi; printf -v "$var" '%s' "$ans"; }
-ask_secret() { local var=$1 prompt=$2; local ans; read -rs -p "  $prompt (typed text stays hidden, Enter to skip): " ans; echo; printf -v "$var" '%s' "$ans"; }
+ask_secret() { local var=$1 prompt=$2; local ans=""; if [ "$YES" != 1 ]; then read -rs -p "  $prompt (typed text stays hidden, Enter to skip): " ans; echo; fi; printf -v "$var" '%s' "$ans"; }
 confirm() { local ans; [ "$YES" = 1 ] && return 0; read -r -p "  $1 [Y/n]: " ans; [ -z "$ans" ] || [[ "$ans" =~ ^[Yy] ]]; }
 logfile() { echo "$STATE_DIR/logs/$1-$(date +%Y%m%d-%H%M%S).log"; }
 # shellcheck disable=SC1090
@@ -73,7 +78,7 @@ ensure_login() {
 
 # ---------------------------------------------------------------- discovery -----------------
 discover() {
-  API=""; USER_NAME=""; OCP_VERSION=""; DOMAIN="${DOMAIN:-}"; NODE_COUNT=0; INSTANCE=""; GPUS="${GPUS:-0}"; GPU_PRODUCT=""; GPU_REPLICAS=""; GPU_ALLOC=0
+  API=""; USER_NAME=""; OCP_VERSION=""; DOMAIN="${DOMAIN:-}"; NODE_COUNT=0; INSTANCE=""; GPUS="${GPUS:-0}"; GPU_PRODUCT=""; GPU_MEMORY=""; GPU_REPLICAS=""; GPU_ALLOC=0
   RHOAI_VERSION=""; DSC=""; KSERVE=""; OP_NFD=no; OP_GPU=no; OP_CM=no; OP_GITOPS=no; LLM_NS="${LLM_NS:-}"; LLM_READY=""; LLM_SHARE=""
   PROJECT_EXISTS=no; ARGO_READY=no; TURN_SECRET=no; SECRETS_IN_CLUSTER=no; APP_STATE=""; ISVC_TOTAL=0; ISVC_READY=0; PODS_NOT_READY=1; FRONTEND_URL=""; N8N_URL=""; DOCS_INDEXED=""
   LOGGED_IN=0; command -v oc >/dev/null && oc whoami >/dev/null 2>&1 && LOGGED_IN=1
@@ -86,6 +91,7 @@ discover() {
   GPUS=$(oc get nodes -o json 2>/dev/null | jq '[.items[].metadata.labels["nvidia.com/gpu.count"] // "0" | tonumber] | add')
   [ "${GPUS:-0}" -gt 0 ] || GPUS=$(oc get nodes -o json 2>/dev/null | jq '[.items[].status.capacity["nvidia.com/gpu"] // "0" | tonumber] | add')
   GPU_PRODUCT=$(oc get nodes -o jsonpath='{.items[0].metadata.labels.nvidia\.com/gpu\.product}' 2>/dev/null)
+  GPU_MEMORY=$(oc get nodes -o jsonpath='{.items[0].metadata.labels.nvidia\.com/gpu\.memory}' 2>/dev/null)
   GPU_REPLICAS=$(oc get nodes -o jsonpath='{.items[0].metadata.labels.nvidia\.com/gpu\.replicas}' 2>/dev/null)
   GPU_ALLOC=$(oc get nodes -o json 2>/dev/null | jq '[.items[].status.allocatable["nvidia.com/gpu"] // "0" | tonumber] | add')
   RHOAI_VERSION=$(oc get csv -A -o json 2>/dev/null | jq -r '.items[] | select(.metadata.name | startswith("rhods-operator")) | .spec.version' | head -1)
@@ -117,21 +123,19 @@ discover() {
 }
 
 # ---------------------------------------------------------------- profile -------------------
-# remote: no GPU, every model is a remote OpenAI-compatible endpoint
-# shared: 1 to 3 GPUs, each advertised 4 times; models get fixed memory shares; guardrails off
-# full:   4 GPUs or more, one GPU per model, guardrails on
-suggest_profile() { if [ "${GPUS:-0}" -eq 0 ]; then echo remote; elif [ "$GPUS" -lt 4 ]; then echo shared; else echo full; fi; }
-profile_slices() { case "$1" in shared) echo 4;; *) echo 1;; esac; }
+# gpu:    every GPU on the cluster is used, each advertised 4 times through time-slicing so the
+#         language model, Whisper and BGE-M3 can share a card; fixed memory shares; no guardrails
+# remote: no GPU, every model is a remote OpenAI-compatible endpoint (PROFILE=remote)
+suggest_profile() { if [ "${GPUS:-0}" -eq 0 ]; then echo remote; else echo gpu; fi; }
+profile_slices() { case "$1" in gpu) echo 4;; *) echo 1;; esac; }
 write_values_object() {  # -> $STATE_DIR/values-object.json, deep-merged over the values file by Argo CD
   local llm_deploy=true; [ -n "${LLM_NS:-}" ] && llm_deploy=false
   case "$PROFILE" in
   remote)
     jq -n --arg le "$REMOTE_LLM_ENDPOINT" --arg lm "$REMOTE_LLM_MODEL" --arg se "$REMOTE_STT_ENDPOINT" --arg sm "$REMOTE_STT_MODEL" --arg ee "$REMOTE_EMB_ENDPOINT" --arg em "$REMOTE_EMB_MODEL" \
       '{models:{llm:{deploy:false,endpoint:$le,servedModelName:$lm},stt:{deploy:false,endpoint:$se,servedModelName:$sm},embeddings:{deploy:false,endpoint:$ee,servedModelName:$em},guardrails:{provider:"none",deploy:false}}}' ;;
-  shared)
+  *)
     jq -n --argjson d "$llm_deploy" '{models:{llm:{deploy:$d,args:["--max-model-len=8192","--gpu-memory-utilization=0.45","--max-num-seqs=8","--enforce-eager","--enable-auto-tool-choice","--tool-call-parser=llama3_json"]},stt:{deploy:true,args:["--gpu-memory-utilization=0.15","--enforce-eager"]},embeddings:{args:["--runner=pooling","--max-model-len=8192","--gpu-memory-utilization=0.12","--enforce-eager"]},guardrails:{provider:"none",deploy:false}}}' ;;
-  full)
-    jq -n --argjson d "$llm_deploy" '{models:{llm:{deploy:$d,args:["--max-model-len=16384","--gpu-memory-utilization=0.90","--enable-auto-tool-choice","--tool-call-parser=llama3_json"]},stt:{deploy:true,args:[]},embeddings:{args:["--runner=pooling","--max-model-len=8192"]},guardrails:{provider:"granite-guardian",deploy:true}}}' ;;
   esac > "$STATE_DIR/values-object.json"
 }
 
@@ -187,23 +191,31 @@ step1() {
   [ "$KSERVE" = Managed ]
 }
 step2() {
-  say "${B}Step 2: deployment profile${N}"
-  local sug; sug=$(suggest_profile)
-  say "  GPUs: ${GPUS:-0}. Profiles: remote (no GPU, remote model endpoints), shared (1 to 3 GPUs shared through time-slicing, guardrails off), full (4 or more GPUs, one per model, guardrails on)."
-  ask PROFILE "Profile" "${PROFILE:-$sug}"
-  case "$PROFILE" in remote|shared|full) ;; *) bad "unknown profile $PROFILE"; return 1;; esac
-  if [ "$PROFILE" = remote ]; then
-    say "  Remote OpenAI-compatible endpoints (base URL including /v1) and model ids; keys go into $SECRETS_FILE as LLM_API_KEY, STT_API_KEY, EMBEDDINGS_API_KEY."
-    ask REMOTE_LLM_ENDPOINT "LLM endpoint" "${REMOTE_LLM_ENDPOINT:-}"; ask REMOTE_LLM_MODEL "LLM model id" "${REMOTE_LLM_MODEL:-}"
-    ask REMOTE_STT_ENDPOINT "Whisper endpoint" "${REMOTE_STT_ENDPOINT:-}"; ask REMOTE_STT_MODEL "Whisper model id" "${REMOTE_STT_MODEL:-whisper-large-v3-turbo}"
-    ask REMOTE_EMB_ENDPOINT "Embeddings endpoint" "${REMOTE_EMB_ENDPOINT:-}"; ask REMOTE_EMB_MODEL "Embeddings model id" "${REMOTE_EMB_MODEL:-bge-m3}"
-    for v in REMOTE_LLM_ENDPOINT REMOTE_LLM_MODEL REMOTE_STT_ENDPOINT REMOTE_EMB_ENDPOINT; do [ -n "${!v}" ] || { bad "$v is required for the remote profile"; return 1; }; save "$v" "${!v}"; done
-    save REMOTE_STT_MODEL "$REMOTE_STT_MODEL"; save REMOTE_EMB_MODEL "$REMOTE_EMB_MODEL"
-  elif [ -n "$LLM_NS" ]; then
-    ok "the deployed $LLM_NS/$LLM_NAME will be the language model"
-    [ "$PROFILE" = shared ] && note "its GPU memory share will be lowered to 0.6 so Whisper (0.15) and BGE-M3 (0.12) fit next to it"
+  say "${B}Step 2: deployment profile${N} (decided from the GPUs on the cluster)"
+  local mem_gib=""; [ -n "$GPU_MEMORY" ] && mem_gib=$((GPU_MEMORY / 1024))
+  say "  found: ${GPUS:-0} GPU(s)${GPU_PRODUCT:+ $GPU_PRODUCT}${mem_gib:+ with $mem_gib GiB each}${LLM_NS:+; language model $LLM_NS/$LLM_NAME already deployed}"
+  say "  the demo needs on GPUs: the language model, Whisper large-v3-turbo and BGE-M3."
+  if [ "${PROFILE:-}" = remote ]; then
+    for v in REMOTE_LLM_ENDPOINT REMOTE_LLM_MODEL REMOTE_STT_ENDPOINT REMOTE_EMB_ENDPOINT; do [ -n "${!v:-}" ] || { bad "PROFILE=remote needs $v (OpenAI-compatible base URL including /v1, or the model id)"; return 1; }; save "$v" "${!v}"; done
+    save REMOTE_STT_MODEL "${REMOTE_STT_MODEL:-whisper-large-v3-turbo}"; save REMOTE_EMB_MODEL "${REMOTE_EMB_MODEL:-bge-m3}"
+    ok "remote profile: every model is a remote endpoint; keys LLM_API_KEY, STT_API_KEY, EMBEDDINGS_API_KEY go into $SECRETS_FILE"
+  elif [ "${GPUS:-0}" -eq 0 ]; then
+    bad "not enough GPUs: the demo needs at least 1 NVIDIA GPU with 24 GB (an L4), this cluster has none."
+    say "     required: 1 GPU of 24 GB shared by the language model (60%), Whisper (15%) and BGE-M3 (12%)"
+    say "     available: 0 GPUs (no node carries nvidia.com/gpu.count; check the instance type with: oc get nodes -L node.kubernetes.io/instance-type)"
+    say "     options: add a GPU node (g6.8xlarge or larger), or run with remote model endpoints: PROFILE=remote REMOTE_LLM_ENDPOINT=... scripts/setup.sh"
+    return 1
+  elif [ -n "$GPU_MEMORY" ] && [ "$GPU_MEMORY" -lt 20000 ]; then
+    bad "not enough GPU memory: the demo needs 22 GB or more on one GPU, this cluster's ${GPU_PRODUCT:-GPU} has $mem_gib GiB."
+    say "     required: language model 60% (about 14 GB with the 3B model), Whisper 15% (3.6 GB), BGE-M3 12% (2.9 GB) on the same card"
+    say "     available: $GPUS x ${GPU_PRODUCT:-GPU} with $mem_gib GiB"
+    say "     options: a GPU with 24 GB (L4, A10G, or larger), or remote endpoints for the language model (PROFILE=remote)"
+    return 1
   else
-    note "the chart will deploy Llama 3.1 8B (4-bit) itself; on the shared profile it gets 45% of a GPU"
+    PROFILE=gpu
+    ok "gpu profile: all $GPUS GPU(s) used, each advertised 4 times through time-slicing"
+    if [ -n "$LLM_NS" ]; then say "     language model: $LLM_NS/$LLM_NAME, its GPU memory share is lowered to 60% in step 3"; else say "     language model: Llama 3.1 8B (4-bit) deployed by the chart at 45%"; fi
+    say "     Whisper 15%, BGE-M3 12%; no guardrail model in this demo"
   fi
   save PROFILE "$PROFILE"; write_values_object; ok "profile $PROFILE saved ($STATE_DIR/values-object.json)"; mark 2
 }
@@ -211,9 +223,8 @@ step3() {
   say "${B}Step 3: cluster bootstrap${N} (operators, KServe, GPU sharing, model share, Argo CD, project)"
   [ -n "${PROFILE:-}" ] || { bad "choose the profile first (step 2)"; return 1; }
   local log; log=$(logfile bootstrap); local slices; slices=$(profile_slices "$PROFILE")
-  local frac=0.6; [ "$PROFILE" = full ] && frac=1
+  local frac=0.6
   say "  running scripts/bootstrap-cluster.sh with GPU_SLICES=$slices LLM_GPU_FRACTION=$frac (log $log)"
-  confirm "Continue?" || return 1
   PROJECT="$PROJECT" GPU_SLICES="$slices" LLM_NAME="${LLM_NS:+$LLM_NAME}" LLM_GPU_FRACTION="$frac" LOG_FILE="$log" "$ROOT/scripts/bootstrap-cluster.sh" && { mark 3; return 0; }
   bad "bootstrap reported problems; see $log, fix, and run: scripts/setup.sh --step 3"; return 1
 }
@@ -222,7 +233,7 @@ step4() {
   [ "$PROJECT_EXISTS" = yes ] || { bad "project missing; run step 3 first"; return 1; }
   if PROJECT="$PROJECT" "$ROOT/scripts/setup-turn-tls.sh" copy; then mark 4; return 0; fi
   warn "the cluster's wildcard certificate cannot be used; cert-manager can request one from Let's Encrypt (the apps domain must be reachable from the internet)"
-  ask ACME_EMAIL "E-mail for Let's Encrypt (empty to skip TURN for now)" "${ACME_EMAIL:-}"
+  [ "$YES" = 1 ] || ask ACME_EMAIL "E-mail for Let's Encrypt (empty to skip TURN for now)" "${ACME_EMAIL:-}"
   [ -n "$ACME_EMAIL" ] || { warn "TURN skipped; voice works on open networks only. Rerun: scripts/setup.sh --step 4"; return 0; }
   save ACME_EMAIL "$ACME_EMAIL"
   PROJECT="$PROJECT" ACME_EMAIL="$ACME_EMAIL" "$ROOT/scripts/setup-turn-tls.sh" cert-manager && mark 4
@@ -257,7 +268,8 @@ step5() {
   say ""; say "  keys present in $SECRETS_FILE:"; grep -v '^#' "$SECRETS_FILE" | grep -v '=$' | grep -v '^$' | sed 's/=.*/=<set>/' | sed 's/^/     /'
   note "edit the file at any time with: nano $SECRETS_FILE ; the deploy step (6) applies it. Changed a key later? scripts/setup.sh --step 5 then --step 6."
   if [ "$SECRETS_IN_CLUSTER" = yes ]; then
-    confirm "Rewrite the integrations secret in the cluster from the file now (passwords are kept)?" && NAMESPACE="$PROJECT" SECRETS_FILE="$SECRETS_FILE" REFRESH=assistant-integrations,assistant-models "$ROOT/scripts/create-secrets.sh" | sed 's/^/  /'
+    note "rewriting the integrations and model-key secrets in the cluster from the file (passwords are kept)"
+    NAMESPACE="$PROJECT" SECRETS_FILE="$SECRETS_FILE" REFRESH=assistant-integrations,assistant-models "$ROOT/scripts/create-secrets.sh" | sed 's/^/  /'
   fi
   mark 5
 }
@@ -267,7 +279,7 @@ step6() {
   [ -f "$STATE_DIR/values-object.json" ] || write_values_object
   local log; log=$(logfile deploy)
   say "  profile $PROFILE, values chart/values-demo-cluster.yaml plus $STATE_DIR/values-object.json, secrets from $SECRETS_FILE (log $log)"
-  confirm "Continue? (10 to 20 minutes, mostly model downloads)" || return 1
+  say "  this takes 10 to 20 minutes, mostly model downloads"
   local llm_env=()
   if [ "$PROFILE" = remote ]; then llm_env=(LLM_ENDPOINT="$REMOTE_LLM_ENDPOINT" LLM_MODEL="$REMOTE_LLM_MODEL"); elif [ -z "${LLM_NS:-}" ]; then llm_env=(LLM_ENDPOINT="http://llama-3-1-8b-instruct-predictor.$PROJECT.svc.cluster.local:8080/v1" LLM_MODEL="llama-3-1-8b-instruct"); fi
   # shellcheck disable=SC1090
@@ -283,7 +295,7 @@ step7() {
   say "  3. Open WF5 Transcript archival, select the Google Docs node, pick the credential, save, Publish."
   say "  4. Overview shows WF1 to WF7 as Published."
   say "  Optional but recommended: Settings > n8n API > create an API key; this script uses it to verify the workflows and keeps it in $STATE_DIR/n8n.key (never in git)."
-  ask_secret key "n8n API key"
+  key=""; [ -f "$STATE_DIR/n8n.key" ] || ask_secret key "n8n API key"
   if [ -n "$key" ]; then printf '%s' "$key" > "$STATE_DIR/n8n.key"; chmod 600 "$STATE_DIR/n8n.key"; fi
   if [ -f "$STATE_DIR/n8n.key" ]; then
     local wf; wf=$(curl -s --max-time 20 -H "X-N8N-API-KEY: $(cat "$STATE_DIR/n8n.key")" "$N8N_URL/api/v1/workflows?limit=50" | jq -r '.data[]? | "\(.active) \(.name)"' 2>/dev/null)
@@ -330,10 +342,8 @@ step) [ -n "$ONLY" ] || { echo "usage: scripts/setup.sh --step N"; exit 1; }; "s
 esac
 while :; do
   [ -n "$NEXT" ] || { say "  ${G}Every step is done.${N} scripts/setup.sh --step N runs one again."; exit 0; }
-  say "  Next: step $NEXT, ${STEPS[$((NEXT-1))]}."
-  if [ "$YES" = 1 ]; then ans=""; else read -r -p "  Enter to run it, a number to run another step, q to quit: " ans; fi
-  case "$ans" in q|Q) exit 0;; [1-9]) step="$ans";; "") step="$NEXT";; *) continue;; esac
-  "step$step"; rc=$?
+  say "  Running step $NEXT, ${STEPS[$((NEXT-1))]}."
+  "step$NEXT"; rc=$?
   discover; show_status
-  [ "$rc" = 0 ] || { say "  step $step needs attention (see above). q to quit, Enter to try again."; }
+  [ "$rc" = 0 ] || { say "  ${R}Stopped at step $NEXT${N}: fix what is reported above, then run scripts/setup.sh again (it resumes there)."; exit 1; }
 done

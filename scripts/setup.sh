@@ -470,7 +470,8 @@ step9() {
   if NS="$PROJECT" "$ROOT/scripts/demo-preflight.sh" -f "$ROOT/chart/values-demo-cluster.yaml" "${extra[@]}" --set "global.domain=$DOMAIN" "${llm_set[@]}"; then
     mark 9; say ""; say "  ${G}Ready for the demo.${N}"; say "  frontend $FRONTEND_URL"; say "  n8n      $N8N_URL"
     say "  Walk through docs/demo-script.md: a cited text answer, a voice session (the browser asks for the microphone), a request by voice with its Slack card, the archive button."
-    say "  Next cluster: clone, scripts/setup.sh; update the Slack request URL and the Google redirect URI with the new domain (they contain it)."
+    say "  Manual, once per cluster: at api.slack.com/apps set the app's Interactivity request URL to $N8N_URL/webhook/slack-interactions (it contains this cluster's domain)."
+    say "  Next cluster: clone, scripts/setup.sh."
   else bad "preflight reported problems (docs/troubleshooting.md); fix and run: scripts/setup.sh --step 9"; return 1; fi
 }
 

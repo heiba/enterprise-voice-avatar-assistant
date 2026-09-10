@@ -16,18 +16,26 @@ SYSTEM = (
     "answer, or asking how to request something without actually requesting it.\n"
     "Examples: 'I need a new laptop, mine no longer boots' -> REQUEST. 'Can I get access to the finance share?' -> "
     "REQUEST. 'How often must passwords be rotated?' -> QUESTION. 'How do I request a laptop?' -> QUESTION. "
-    "'Thanks!' -> QUESTION."
+    "'Thanks!' -> QUESTION.\n"
+    "When the assistant's previous message is given and it says a request was already logged (it mentions a "
+    "REQ- reference), a reply that only confirms, thanks, or tells the assistant to go ahead, place or submit it "
+    "is a follow-up -> QUESTION, not a new request."
 )
 
 
-def detect(message: str) -> str:
-    """Return 'request' or 'question'. Any failure counts as a question so answering never breaks."""
+def detect(message: str, previous_assistant: str | None = None) -> str:
+    """Return 'request' or 'question'. Any failure counts as a question so answering never breaks.
+    previous_assistant is the assistant's last message, so a confirmation of a request that was
+    just filed is not filed again."""
     if not settings.request_intent_detection:
         return "question"
+    content = message[:2000]
+    if previous_assistant:
+        content = f"Assistant's previous message: {previous_assistant[:600]}\n\nEmployee's latest message: {content}"
     try:
         completion = clients.llm().chat.completions.create(
             model=settings.llm_model,
-            messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": message[:2000]}],
+            messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": content}],
             temperature=0,
             max_tokens=4,
         )

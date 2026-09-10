@@ -21,7 +21,7 @@ def _question(monkeypatch):
     )
     monkeypatch.setattr(guardrails, "check_input", lambda text: Verdict(True, "none"))
     monkeypatch.setattr(guardrails, "check_output", lambda user, answer: Verdict(True, "none"))
-    monkeypatch.setattr(intent, "detect", lambda text: "question")
+    monkeypatch.setattr(intent, "detect", lambda text, previous=None: "question")
 
     class FakeLLM:
         class chat:

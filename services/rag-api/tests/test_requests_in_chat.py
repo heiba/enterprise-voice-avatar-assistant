@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app import guardrails, intent, memory, notifications, rag, retrieval, tickets
 from app.guardrails import Verdict
 from app.main import app
-from app.schemas import Ticket
+from app.schemas import RequestIntake, Ticket
 
 
 class FakeCompletion:
@@ -59,10 +59,68 @@ def test_intent_detection_words(monkeypatch):
     assert intent.detect("anything") == "question"
 
 
+def test_intent_detection_sees_the_previous_turn(monkeypatch):
+    seen = {}
+
+    def llm():
+        class Completions:
+            def create(self, **kwargs):
+                seen["content"] = kwargs["messages"][1]["content"]
+                return fake_llm("QUESTION")().chat.completions.create(**kwargs)
+
+        class Chat:
+            completions = Completions()
+
+        class Client:
+            chat = Chat()
+
+        return Client()
+
+    monkeypatch.setattr(intent.clients, "llm", llm)
+    assert intent.detect("place the request", "I've logged your request REQ-000002: Repair the laptop.") == "question"
+    assert "REQ-000002" in seen["content"] and "place the request" in seen["content"]
+
+
+def test_intake_requires_approval_by_default(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(
+        tickets,
+        "classify_request",
+        lambda text: {"title": "Repair laptop", "category": "hardware", "priority": "normal", "summary": "", "needs_approval": False, "details": {}},
+    )
+    created = {}
+
+    def fake_create(data, actor=None):
+        created["needs_approval"] = data.needs_approval
+        created["payload"] = data.payload
+        return make_ticket(status="intake")
+
+    def fake_update(ticket_id, data):
+        created.setdefault("statuses", []).append(data.status)
+        return make_ticket(status=data.status)
+
+    monkeypatch.setattr(tickets, "create", fake_create)
+    monkeypatch.setattr(tickets, "update", fake_update)
+    monkeypatch.setattr(tickets, "notify_n8n", lambda *a, **k: True)
+    monkeypatch.setattr(settings, "requests_require_approval", True)
+    ticket, _classification, _ = tickets.intake(RequestIntake(text="my laptop is broken", session_id="s1", user_id="u1", channel="voice"))
+    assert created["needs_approval"] is True
+    assert created["payload"]["model_needs_approval"] is False
+    assert "pending_approval" in created["statuses"]
+    assert ticket.status == "pending_approval"
+
+    created.clear()
+    monkeypatch.setattr(settings, "requests_require_approval", False)
+    tickets.intake(RequestIntake(text="my laptop is broken", session_id="s1", user_id="u1", channel="voice"))
+    assert created["needs_approval"] is False
+    assert "pending_approval" not in created["statuses"]
+
+
 def test_chat_files_a_request(monkeypatch):
     monkeypatch.setattr(guardrails, "check_input", lambda text: Verdict(True, "none"))
     monkeypatch.setattr(retrieval, "search", lambda *a, **k: [])
-    monkeypatch.setattr(intent, "detect", lambda message: "request")
+    monkeypatch.setattr(intent, "detect", lambda message, previous=None: "request")
     filed = []
 
     def fake_intake(request):
@@ -91,7 +149,7 @@ def test_chat_files_a_request(monkeypatch):
 def test_chat_without_ticket_backend(monkeypatch):
     monkeypatch.setattr(guardrails, "check_input", lambda text: Verdict(True, "none"))
     monkeypatch.setattr(retrieval, "search", lambda *a, **k: [])
-    monkeypatch.setattr(intent, "detect", lambda message: "request")
+    monkeypatch.setattr(intent, "detect", lambda message, previous=None: "request")
 
     def no_db(request):
         raise tickets.TicketError(503, "no database")
@@ -105,7 +163,7 @@ def test_chat_without_ticket_backend(monkeypatch):
 def test_text_mode_maps_to_chat_channel(monkeypatch):
     monkeypatch.setattr(guardrails, "check_input", lambda text: Verdict(True, "none"))
     monkeypatch.setattr(retrieval, "search", lambda *a, **k: [])
-    monkeypatch.setattr(intent, "detect", lambda message: "request")
+    monkeypatch.setattr(intent, "detect", lambda message, previous=None: "request")
     seen = []
 
     def fake_intake(request):

@@ -268,6 +268,7 @@ Application services built from this repository.
 | `ragApi.image` | `""` | Container image (full reference). |
 | `ragApi.replicas` | `1` | Number of pods. |
 | `ragApi.topK` | `5` | Number of chunks retrieved per question. |
+| `ragApi.requestsRequireApproval` | `true` | Every request filed from chat or voice waits for a decision on its Slack card. `false`: the language model decides per request whether approval is needed, and requests it judges as free of cost, access or permission changes are approved by the workflow at once. |
 | `ragApi.resources.requests.cpu` | `500m` | CPU request. |
 | `ragApi.resources.requests.memory` | `1Gi` | Memory request. |
 | `ragApi.resources.limits.cpu` | `"2"` | CPU limit. |

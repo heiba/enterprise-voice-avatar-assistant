@@ -84,17 +84,24 @@ class Assistant(Agent):
                     yield piece
                 return
             except httpx.HTTPStatusError as exc:
-                log.warning(
-                    "RAG API has no streaming endpoint (%s); whole answers from now on",
-                    exc.response.status_code,
-                )
-                _STREAM["enabled"] = False
+                if exc.response.status_code in (404, 405):
+                    log.warning(
+                        "RAG API has no streaming endpoint (%s); whole answers from now on",
+                        exc.response.status_code,
+                    )
+                    _STREAM["enabled"] = False
+                else:
+                    log.warning(
+                        "streamed RAG API call answered %s for session %s; retrying with a whole answer",
+                        exc.response.status_code,
+                        self._session_id,
+                    )
             except Exception:
                 log.exception("streamed RAG API call failed for session %s", self._session_id)
                 if spoken["any"]:
                     return
-                yield "Sorry, I could not reach the knowledge base just now. Please try again in a moment."
-                return
+            # a transient failure (the stream broke before anything was spoken, or an error
+            # status) gets one more try with a whole answer before the apology
         try:
             reply = await rag_client.chat(text, self._session_id, self._user_id, self._user_name)
         except Exception:

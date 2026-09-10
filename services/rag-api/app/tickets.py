@@ -201,6 +201,9 @@ def notify_n8n(ticket: Ticket, classification: dict[str, Any], channel: str) -> 
 
 def intake(request: RequestIntake) -> tuple[Ticket, dict[str, Any], bool]:
     classification = classify_request(request.text)
+    if settings.requests_require_approval and not classification["needs_approval"]:
+        classification["details"]["model_needs_approval"] = False
+        classification["needs_approval"] = True
     ticket = create(
         TicketCreate(
             title=classification["title"],

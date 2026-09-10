@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     history_turns: int = 8
     # Detect service requests in chat/voice and file tickets from the conversation
     request_intent_detection: bool = True
+    # Every request filed from a conversation waits for a decision in Slack. Off: the classifier
+    # decides per request (needs_approval) and the rest is approved by the workflow at once.
+    requests_require_approval: bool = True
     # Follow-ups with at most this many words are retrieved together with the previous question
     followup_max_words: int = 6
     snippet_chars: int = 300

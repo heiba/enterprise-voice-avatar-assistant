@@ -74,6 +74,10 @@ Symptoms first, then the cause, the command that confirms it, and the fix. Every
 
 **WF5 fails at "Transcript to file" with "The value in transcript is not set".** The "Prepare document" node no longer finds the transcript in the RAG API's response; re-import the shipped workflow if you edited it by hand.
 
+**A request was approved without a Slack card.** The chart ships with `ragApi.requestsRequireApproval: true`, which sends every request filed from a conversation to Slack. With it off, the language model decides per request (`needs_approval`) and WF4 approves the others at once with the note "no approval required"; a small model can judge a laptop repair as needing none. The model's own judgment is kept in the ticket payload as `model_needs_approval`.
+
+**A confirmation such as "place the request" opened a second ticket.** The intent detector now sees the assistant's previous message; a reply that only confirms a request that was just logged is treated as a follow-up. Older images classify the latest message alone.
+
 ## Avatar
 
 **The face never appears, audio only, log says the avatar provider failed to start.** The agent falls back to audio after `avatar_start_timeout_seconds`. Check `oc logs deploy/voice-agent | grep -i avatar`. Common causes: `TAVUS_API_KEY` or `TAVUS_FACE_ID` missing from the integrations secret (or `voiceAgent.extraEnv`), the provider cannot reach the public LiveKit URL (`LIVEKIT_PUBLIC_URL` must be the `wss://` Route), or the plan's single stream is still held by a previous conversation. List and end stale conversations with the Tavus API: `GET https://tavusapi.com/v2/conversations?status=active`, then `POST …/conversations/<id>/end`, using `x-api-key`.

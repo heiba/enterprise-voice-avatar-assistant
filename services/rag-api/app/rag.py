@@ -157,8 +157,9 @@ def _prepare(request: ChatRequest) -> ChatResponse | Prepared:
         )
 
     history = memory.history(session_id, settings.history_turns * 2)
+    previous_assistant = next((m["content"] for m in reversed(history) if m.get("role") == "assistant"), None)
     with ThreadPoolExecutor(max_workers=2) as pool:
-        intent_future = pool.submit(intent.detect, request.message)
+        intent_future = pool.submit(intent.detect, request.message, previous_assistant)
         hits_future = pool.submit(
             retrieval.search, retrieval_query(request.message, history), top_k=request.top_k
         )

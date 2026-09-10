@@ -317,6 +317,10 @@ ragApi:
   image: ""
   replicas: 1
   topK: 5
+  # Every request filed from chat or voice waits for a decision on its Slack card. false: the
+  # language model decides per request whether approval is needed, and requests it judges as
+  # free of cost, access or permission changes are approved by the workflow at once.
+  requestsRequireApproval: true
   resources:
     requests:
       cpu: 500m

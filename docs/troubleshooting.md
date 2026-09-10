@@ -60,7 +60,7 @@ Symptoms first, then the cause, the command that confirms it, and the fix. Every
 
 **`scripts/import-workflows.sh` fails with 401.** The n8n API key was not set or is the placeholder. Create one under Settings, n8n API, export it as `N8N_API_KEY`.
 
-**Workflow cannot be published: "Missing required credential".** A Slack or Google node without a credential. Slack is created automatically from `SLACK_BOT_TOKEN` in the integrations secret at first start; Google Docs must be attached once in the editor on both Google nodes of WF5. If the editor loops on "Autosave failed", unpublish the workflow first, attach the credential, then publish.
+**Workflow cannot be published: "Missing required credential".** A Slack node without a credential. The Slack credential is created automatically from `SLACK_BOT_TOKEN` in the integrations secret at first start; if the secret was filled later, restart n8n (`oc rollout restart deploy/n8n`) and re-import the workflows. If the editor loops on "Autosave failed", unpublish the workflow first, attach the credential, then publish.
 
 **Slack approval card has no buttons.** The n8n Slack node needs the Block Kit wrapper `{"blocks": [...]}`; a bare array is silently dropped. WF4 builds the wrapper; keep it if you edit the card.
 
@@ -70,9 +70,9 @@ Symptoms first, then the cause, the command that confirms it, and the fix. Every
 
 **Webhooks report "not registered" right after an n8n restart.** Activation takes a few seconds after `/healthz` turns green. Re-probe: `curl https://<n8n host>/webhook/chat` should answer "not registered for GET requests", which means it exists.
 
-**Google sign-in in n8n expires after seven days.** The OAuth consent screen is in Testing status. Publish the app in Google Cloud console to remove the limit; the unverified-app warning stays and is fine for a demo.
+**Google sign-in expires or asks for consent.** Not applicable any more: the transcript document is created by the RAG API with a service account key, so no sign-in or consent screen is involved. If a Google Doc is not created, see the archival entry below.
 
-**WF5 fails at "Transcript to file" with "The value in transcript is not set".** The Google Docs response replaced the prepared item. The shipped workflow restores the transcript after the Docs write; re-import if you edited the workflow by hand.
+**WF5 fails at "Transcript to file" with "The value in transcript is not set".** The "Prepare document" node no longer finds the transcript in the RAG API's response; re-import the shipped workflow if you edited it by hand.
 
 ## Avatar
 

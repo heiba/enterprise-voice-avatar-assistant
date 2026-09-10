@@ -20,6 +20,7 @@
 # recognised and not repeated.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PATH="$HOME/bin:$HOME/.local/bin:$PATH"   # tools this script installs for the user go to ~/bin
 STATE_DIR="${STATE_DIR:-$HOME/.assistant-setup}"
 STATE="$STATE_DIR/state.env"
 SECRETS_FILE="${SECRETS_FILE:-$HOME/secrets.env}"
@@ -64,6 +65,27 @@ logfile() { echo "$STATE_DIR/logs/$1-$(date +%Y%m%d-%H%M%S).log"; }
 # ---------------------------------------------------------------- login ---------------------
 # Logs in when the bastion is not (or its token expired): proposes the API URL it can find,
 # asks for the user (kubeadmin) and the password from the provisioning e-mail, hidden.
+# helm renders the connectivity test pod (scripts/test-services.sh). The bastion usually has
+# none: install it into ~/bin from the cluster's own download site, else from get.helm.sh.
+ensure_helm() {
+  command -v helm >/dev/null && { ok "helm $(helm version --short 2>/dev/null | cut -d+ -f1)"; return 0; }
+  local arch; arch=$(uname -m); case "$arch" in x86_64) arch=amd64;; aarch64) arch=arm64;; esac
+  mkdir -p "$HOME/bin"
+  note "helm not found; installing it into $HOME/bin"
+  if [ -n "${DOMAIN:-}" ] && curl -fsSL --max-time 120 "https://downloads-openshift-console.$DOMAIN/$arch/linux/helm" -o "$HOME/bin/helm.tmp" 2>/dev/null \
+     && chmod +x "$HOME/bin/helm.tmp" && "$HOME/bin/helm.tmp" version --short >/dev/null 2>&1; then
+    mv "$HOME/bin/helm.tmp" "$HOME/bin/helm"; ok "helm $(helm version --short | cut -d+ -f1) (from the cluster's download site)"; return 0
+  fi
+  rm -f "$HOME/bin/helm.tmp"
+  local ver; ver=$(curl -fsSL --max-time 30 https://get.helm.sh/helm-latest-version 2>/dev/null | tr -d '[:space:]')
+  if [ -n "$ver" ] && curl -fsSL --max-time 300 "https://get.helm.sh/helm-$ver-linux-$arch.tar.gz" | tar -xzO "linux-$arch/helm" > "$HOME/bin/helm.tmp" 2>/dev/null \
+     && chmod +x "$HOME/bin/helm.tmp" && "$HOME/bin/helm.tmp" version --short >/dev/null 2>&1; then
+    mv "$HOME/bin/helm.tmp" "$HOME/bin/helm"; ok "helm $ver (from get.helm.sh)"; return 0
+  fi
+  rm -f "$HOME/bin/helm.tmp"
+  bad "could not install helm; install it by hand (https://helm.sh/docs/intro/install/) into \$PATH and run scripts/setup.sh again"
+  return 1
+}
 ensure_login() {
   command -v oc >/dev/null || { bad "oc is not installed on this host (https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/)"; return 1; }
   if oc whoami >/dev/null 2>&1; then return 0; fi
@@ -203,7 +225,8 @@ show_status() {
 step1() {
   say "${B}Step 1: cluster and prerequisites${N}"
   [ "$LOGGED_IN" = 1 ] || { ensure_login && discover || return 1; }
-  for t in oc jq git openssl curl helm python3; do command -v $t >/dev/null && ok "$t" || warn "$t missing (sudo dnf install -y $t; helm: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash)"; done
+  for t in oc jq git openssl curl python3; do command -v $t >/dev/null && ok "$t" || { bad "$t missing (sudo dnf install -y $t)"; return 1; }; done
+  ensure_helm || return 1
   oc auth can-i create namespaces >/dev/null 2>&1 && ok "cluster-admin permissions" || { bad "this user cannot create cluster resources; use kubeadmin"; return 1; }
   ok "OpenShift $OCP_VERSION on $NODE_COUNT node(s), $INSTANCE"
   case "$OCP_VERSION" in 4.1[0-8].*) warn "OpenShift AI 3.x needs OpenShift 4.19.9 or later";; esac
@@ -451,8 +474,9 @@ say "$(ts) discovering the cluster (a few seconds)"
 discover; show_status
 case "$MODE" in
 status) exit 0 ;;
-step) [ -n "$ONLY" ] || { echo "usage: scripts/setup.sh --step N"; exit 1; }; run_step "$ONLY"; rc=$?; discover; show_status; exit $rc ;;
+step) [ -n "$ONLY" ] || { echo "usage: scripts/setup.sh --step N"; exit 1; }; ensure_helm || exit 1; run_step "$ONLY"; rc=$?; discover; show_status; exit $rc ;;
 esac
+ensure_helm || exit 1   # the deployment test and the verification render the test pod with helm
 while :; do
   [ -n "$NEXT" ] || { say "  ${G}Every step is done.${N} scripts/setup.sh --step N runs one again."; exit 0; }
   current=$NEXT

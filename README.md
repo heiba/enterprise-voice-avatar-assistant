@@ -163,10 +163,10 @@ Models served on OpenShift AI, only if you deploy them with the chart instead of
 - Red Hat OpenShift AI 3.5 or later with KServe in standard deployment mode and the vLLM ServingRuntime enabled
 - NVIDIA GPU Operator and Node Feature Discovery Operator, only if deploying GPU models with the chart
 - A default StorageClass that supports ReadWriteOnce volumes
-- Client tools: `oc` 4.16 or later and `helm` 3.14 or later
+- Client tools: `oc` 4.16 or later and `helm` 3.14 or later (`scripts/setup.sh` installs `helm` into `~/bin` when it is missing)
 - Optional: the OpenShift GitOps operator (Argo CD) for the GitOps deployment path
-- Optional: the TrustyAI component of OpenShift AI, only for the `trustyai` guardrails provider. The default provider, Granite Guardian on vLLM, does not need it
-- Optional external services: a Slack workspace with a bot token, a Google Cloud project with the Docs and Drive APIs enabled, and an avatar provider account (Tavus, Simli, or Hedra). See [Third-party accounts and keys](#third-party-accounts-and-keys)
+- Optional: the TrustyAI component of OpenShift AI, only for the `trustyai` guardrails provider; the demo runs without guardrails
+- Optional external services: a Slack workspace with a bot token, a Google Cloud service account with the Drive API enabled, and an avatar provider account (Tavus, Simli, or Hedra). See [Third-party accounts and keys](#third-party-accounts-and-keys)
 
 Tested with (September 2026, single node with 4x NVIDIA L4):
 
@@ -328,10 +328,10 @@ Before deploying, ensure you have:
 
 - Access to an OpenShift cluster with OpenShift AI installed that meets the requirements above
 - `oc` installed and logged in (`oc whoami` returns your user)
-- `helm` installed
+- `helm` installed (`scripts/setup.sh` installs it for you)
 - Run `scripts/check-prereqs.sh` after logging in; it reports anything missing and which permissions you lack
 - Model endpoints ready: either existing OpenAI-compatible endpoints (MaaS) with API keys, or GPU capacity to deploy models with the chart
-- Optional: a Slack bot token, a Google Cloud OAuth client for Google Docs, and an avatar provider key (Tavus, Simli or Hedra); see [Third-party accounts and keys](#third-party-accounts-and-keys)
+- Optional: a Slack bot token, a Google Cloud service account key for Google Docs, and an avatar provider key (Tavus, Simli or Hedra); see [Third-party accounts and keys](#third-party-accounts-and-keys)
 
 ### Installation
 
@@ -457,7 +457,7 @@ A presenter script with timings, exact questions and expected answers is in [doc
 
 **Avatar providers.** The provider is selected by a single value (`voiceAgent.avatarProvider`): `none` for audio only, or `tavus`, `simli`, or `hedra` through their LiveKit plugins. The provider only receives the assistant's synthesized speech, never the microphone. A self-hosted renderer built on the LiveKit avatar worker API (MuseTalk on a GPU, or LiteAvatar on CPU) is the planned open-source option.
 
-**Guardrails.** Input and output checks run in the RAG API with a provider switch: `none`, `granite-guardian` (Granite Guardian 3.3 8B served on OpenShift AI, the chart default), `llama-guard`, or `trustyai` (the TrustyAI Guardrails orchestrator). Blocked requests return a safe message and are logged.
+**Guardrails.** Input and output checks run in the RAG API with a provider switch: `none` (the demo setting), `granite-guardian` (Granite Guardian 3.3 8B served on OpenShift AI), `llama-guard`, or `trustyai` (the TrustyAI Guardrails orchestrator). Blocked requests return a safe message and are logged; answers stream sentence by sentence only with `none`.
 
 **Workflows.** The seven n8n workflows (chat, ingestion, classification, request approval, transcript archival, SLA escalation, knowledge-gap digest) call the RAG API and ingestion service by their in-cluster service names. n8n imports them on first start; the Slack credential is created from the integrations secret, the Google Docs credential is added once in the n8n UI. The **Archive transcript** button in the chat header hands the current conversation to the archival workflow through the RAG API.
 

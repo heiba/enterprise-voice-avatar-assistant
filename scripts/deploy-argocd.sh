@@ -157,7 +157,8 @@ if synced; then ok "application Synced/Healthy, sync operation $(op_phase)"; els
 fi
 
 step "Models"
-if oc get isvc -n "$PROJECT" -o name 2>/dev/null | grep -q .; then
+has_isvc() { local i; for i in 1 2 3 4; do oc get isvc -n "$PROJECT" -o name 2>/dev/null | grep -q . && return 0; sleep 5; done; return 1; }
+if has_isvc; then
   models_ready() { [ "$(oc get isvc -n "$PROJECT" -o json | jq -r '[.items[] | (.status.conditions[]? | select(.type=="Ready") | .status)] | all(.=="True") and (length>0)')" = "true" ]; }
   waited=0
   until models_ready; do

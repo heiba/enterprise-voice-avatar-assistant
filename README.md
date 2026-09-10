@@ -283,7 +283,7 @@ the images are public on Quay and Argo CD reads this public repository.
 | 2 Deployment profile | Uses every GPU found (below). Not enough GPUs or GPU memory for the demo: it stops and states what is required, what the cluster has, and the options | none |
 | 3 Cluster bootstrap | `scripts/bootstrap-cluster.sh`: installs missing operators from `deploy/bootstrap/`, sets KServe to Managed, applies GPU time-slicing, lowers the deployed model's GPU memory share so the others fit, waits for Argo CD, creates the project with its Argo CD and dashboard labels | none, 5 to 15 min |
 | 4 TURN certificate | Copies the cluster's wildcard certificate into the project for TURN over TLS (voice through corporate networks), or asks Let's Encrypt for one through cert-manager if the cluster's is not trusted | an e-mail address in the cert-manager case |
-| 5 Keys and integrations | Creates `~/secrets.env` from `secrets.env.example`, prints what to create on your laptop (Slack app from `n8n/slack-app-manifest.json`, Tavus key, a Google Cloud service account whose JSON key you paste into the terminal, and a Drive folder shared with it), asks for each value with hidden input (Enter alone asks again, `Skip` leaves that integration off), and creates the secrets in the project. Nothing is typed into `oc`, nothing is copied by hand | the browser work |
+| 5 Keys and integrations | Creates `~/secrets.env` from `secrets.env.example`, then walks through the browser actions one at a time (n8n owner login, Slack app from the manifest it prints with this cluster's host, Tavus key, a Google Cloud service account whose JSON key you paste into the terminal, a Drive folder shared with it), waits for your confirmation where you have to act, asks for each value with hidden input (Enter alone asks again, `Skip` leaves that integration off) and verifies it against the service: the Slack token, the five channels (created and joined by the script), the request URL for a reused app, the Tavus key, the Google key and the folder sharing. Then it creates the secrets in the project. Nothing is typed into `oc`, nothing is copied by hand | the browser work |
 | 6 Deploy with Argo CD | `scripts/deploy-argocd.sh`: finds the language model, creates the secrets from the file, registers the Argo CD application with the domain, the model endpoint and the profile, waits for the sync, the models and the pods, prints the URLs, runs the connectivity test pod | none, 10 to 20 min |
 | 7 n8n workflows | The chart's `n8n-setup` job has created the owner account and an API key; this step reads the key from its secret and checks that WF1 to WF7 are active, then prints where the owner password is | none |
 | 8 Sample documents | `scripts/load-sample-docs.sh`, waits for the ingestion, `scripts/check-index.sh` | none |
@@ -315,9 +315,9 @@ it holds no domain, no endpoint and no key.
 - **Workflows.** A commit that changes `chart/files/n8n-workflows/` restarts n8n at the next
   sync, which re-imports and re-publishes the workflows; edits made in the n8n editor are
   overwritten by that, so make them in the files.
-- **Next cluster.** Clone, `scripts/setup.sh`, and update the one external URL that contains the
-  cluster domain: the Slack app's request URL under Interactivity & Shortcuts. Tokens, the
-  service account key and the Drive folder stay valid.
+- **Next cluster.** Clone, `scripts/setup.sh`. Tokens, the service account key and the Drive
+  folder stay valid; step 5 asks whether the Slack app is reused and shows the request URL to
+  update in that case, since it contains the cluster domain.
 
 When something fails, the step prints a `debug:` line with the commands that show why, the
 logs are in `~/.assistant-setup/logs/`, [docs/SETUP.md](docs/SETUP.md#when-a-step-stops)

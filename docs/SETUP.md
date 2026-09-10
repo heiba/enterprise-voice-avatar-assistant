@@ -66,8 +66,8 @@ Every run starts the same way, whatever the options:
    when a step fails, or when a step finished but the cluster does not show it as done, and
    says what to look at. Run it again and it resumes at that step.
 
-Prompts appear in exactly two places: the login, and step 5 for the keys. Nothing else waits
-for Enter.
+Prompts appear in exactly two places: the login, and step 5 for the keys and the browser
+actions. Nothing else waits for Enter.
 
 ## The nine steps
 
@@ -121,31 +121,32 @@ run later.
 ### 5 Keys and integrations
 
 The only step that needs you in a browser, on your laptop. It creates `~/secrets.env` from
-`secrets.env.example` on the first run, prints what to create for each integration, asks for
-the values with hidden input, writes them into the file, and creates or refreshes the
-secrets in the project with `scripts/create-secrets.sh`. An empty answer or one of the wrong
-shape (a Slack token that does not start with `xoxb-`, a pasted key that is not a service
-account JSON, a folder id with other characters) is asked again; Enter alone never skips.
-To leave an integration out, type `Skip` at its prompt: the step says which feature stays
-off and how to add the key later (put it in `~/secrets.env`, then `--step 5` and `--step 6`).
-Values already in the file are not asked again, so a run interrupted here continues where it
-stopped. With `--yes` nothing is asked: keys in the file are used, missing ones are reported
-as skipped.
+`secrets.env.example` on the first run, then walks through the manual actions one at a time:
+each is printed with its number, the script waits for Enter (or `Skip`) where you have to do
+something, asks for the resulting value with hidden input, and checks the value against the
+service before moving on. Nothing is trusted on your word: a wrong token, an unshared folder
+or a revoked key is reported at once and asked again. At the end the secrets in the project
+are created or refreshed with `scripts/create-secrets.sh`.
 
-| Integration | What to create | What the step asks |
+| Part | Browser action | What the script checks or does |
 |---|---|---|
-| Slack | An app from `n8n/slack-app-manifest.json` with `N8N_HOST` replaced by the n8n host the step prints; install it to the workspace; the five channels with the app invited | The Bot User OAuth Token (`xoxb-…`) |
-| Tavus | An API key in the developer settings | The key |
-| Google Docs | A Google Cloud project with the Drive API enabled, a service account without roles, a JSON key for it; a Drive folder shared with the service account's e-mail as Editor | The key file's content, pasted into the terminal and finished with a line containing only `}` (a path to the file also works); then the folder id, or the folder's whole URL, from which the id is taken |
-| Remote models (profile `remote` only) | Nothing | `LLM_API_KEY`, `STT_API_KEY`, `EMBEDDINGS_API_KEY` |
+| n8n owner (5o) | none | Asks for the owner e-mail (default `admin@example.com`) and a password (Enter generates one; n8n wants 8 characters with a number and a capital). The chart's job creates the account with them. Once the account exists, the cluster's values are copied into `~/secrets.env`; change the password in the n8n UI, then in the file |
+| Slack app (5a, 5b) | Create the app from the manifest the script prints (also saved as `~/slack-app-manifest.json`, with this cluster's n8n host already in it), install it, paste the Bot User OAuth Token | Calls Slack with the token and prints the app and workspace names; a rejected token is asked again |
+| Slack channels (5c) | none, normally | Lists the channels, creates the five missing ones and joins them (scopes `channels:manage` and `channels:join` from the manifest). An app installed with fewer scopes gets the instruction and a confirmation instead |
+| Slack request URL (5d) | For an app created from this manifest: none. For a reused app: set Interactivity & Shortcuts > Request URL to `https://<n8n host>/webhook/slack-interactions` | Asks which case it is; remembers the host it was confirmed for, so a re-run on the same cluster does not ask again |
+| Tavus (5e) | Create an API key | Calls the Tavus API with it; a rejected key is asked again |
+| Google key (5f, 5g) | Enable the Drive API, create a service account and a JSON key, paste the file's content (finish with a line containing only `}`; a path to the file also works) | Validates the JSON, then obtains an access token with it; a revoked key or disabled account is asked again |
+| Google folder (5h) | Share a Drive folder with the service account's e-mail as Editor, paste the folder's URL or id | Reads the folder through the Drive API as the service account and checks it can add files; an unshared folder or a wrong id is asked again |
+| Remote model keys (profile `remote` only) | none | `LLM_API_KEY`, `STT_API_KEY`, `EMBEDDINGS_API_KEY` |
 
-The pasted key is validated (it must contain `client_email` and `private_key`), saved to
-`~/.assistant-setup/google-sa.json`, and referenced from the file as
-`GOOGLE_SERVICE_ACCOUNT_FILE`; the secrets script stores its content in the cluster as
-`GOOGLE_SERVICE_ACCOUNT_JSON`. No key is ever typed into `oc` or pasted into a manifest.
-
-Edit `~/secrets.env` at any time; `--step 5` rewrites the integrations, model-key and n8n
-secrets from it and keeps the generated passwords, `--step 6` restarts what uses them.
+There is no Google OAuth client and no redirect URL: the RAG API writes the documents with
+the service account. Enter alone never skips a value; `Skip` at any prompt leaves that
+integration off, with a warning that says how to add it later (put the value in
+`~/secrets.env`, then `--step 5` and `--step 6`). Values already in the file are not asked
+again but are still verified, so a run interrupted here continues where it stopped, and a key
+that stopped working is caught on the next run. With `--yes` nothing is asked: keys in the
+file are used, missing ones are reported as skipped. No key is ever typed into `oc` or pasted
+into a manifest.
 
 ### 6 Deploy with Argo CD
 
@@ -187,9 +188,7 @@ approved in Slack (`#assistant-documents`); that is expected.
 `scripts/demo-preflight.sh` with the same values, overlay and parameters as the deployment:
 models Ready, no pod outside Running or Completed, the Argo CD state, the connectivity test
 pod, and the six n8n webhooks registered. On `PRE-FLIGHT OK` the step prints the frontend
-and n8n URLs, the pointer to [docs/demo-script.md](demo-script.md), and the one thing that
-stays manual because it contains the cluster domain: the Slack app's Interactivity request
-URL, `https://<n8n host>/webhook/slack-interactions`.
+URL, the n8n URL with its login, and the pointer to [docs/demo-script.md](demo-script.md).
 
 ## Resuming, re-running, starting over
 
@@ -205,9 +204,10 @@ URL, `https://<n8n host>/webhook/slack-interactions`.
   confirms it. To redeploy from nothing, delete the Argo CD application and the project first
   (README, [Delete](../README.md#delete)).
 - **A new cluster.** Clone, `scripts/setup.sh`. The state directory is per bastion, so a new
-  bastion starts clean; a reused laptop clone does not matter, the state lives on the bastion.
-  Tokens, the service account key and the Drive folder stay valid; only the Slack request URL
-  changes.
+  bastion starts clean. Tokens, the service account key and the Drive folder stay valid; copy
+  the old `~/secrets.env` to the new bastion to skip re-pasting them. The Slack request URL
+  contains the domain: step 5 asks whether the app is new or reused and, for a reused one,
+  shows the URL to set and waits for the confirmation.
 
 ## When a step stops
 

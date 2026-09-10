@@ -357,28 +357,127 @@ YAML
   done
   ok "certificate Ready for $host (renews itself)"; mark 4
 }
+# pause <text>: shows a browser action and waits for Enter (Skip returns 1). With --yes it only prints.
+pause() { say "$1"; [ "$YES" = 1 ] && return 0; local a; read -r -p "  Press Enter when done (or type Skip): " a; ! is_skip "$a"; }
+slack_api() { curl -s --max-time 20 -H "Authorization: Bearer $SLACK_BOT_TOKEN" "https://slack.com/api/$1" "${@:2}"; }
+# google_token <key file>: prints an access token obtained with the service account (JWT signed
+# by openssl), or ERROR <reason>. Proves the key is valid and the Drive API accepts it.
+google_token() {
+  python3 - "$1" <<'PY'
+import base64, json, os, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
+d = json.load(open(sys.argv[1]))
+b64 = lambda b: base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+now = int(time.time())
+msg = b64(json.dumps({"alg": "RS256", "typ": "JWT"}).encode()) + "." + b64(json.dumps({"iss": d["client_email"], "scope": "https://www.googleapis.com/auth/drive", "aud": d["token_uri"], "iat": now, "exp": now + 600}).encode())
+kf = tempfile.NamedTemporaryFile("w", delete=False); kf.write(d["private_key"]); kf.close()
+try:
+    sig = subprocess.run(["openssl", "dgst", "-sha256", "-sign", kf.name], input=msg.encode(), capture_output=True, check=True).stdout
+finally:
+    os.unlink(kf.name)
+req = urllib.request.Request(d["token_uri"], data=urllib.parse.urlencode({"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", "assertion": msg + "." + b64(sig)}).encode())
+try:
+    print(json.load(urllib.request.urlopen(req, timeout=20))["access_token"])
+except urllib.error.HTTPError as e:
+    print("ERROR " + e.read().decode()[:200].replace("\n", " "))
+except Exception as e:  # noqa: BLE001
+    print("ERROR " + str(e)[:200])
+PY
+}
 step5() {
-  say "${B}Step 5: keys and integrations${N} (one file: $SECRETS_FILE)"
+  say "${B}Step 5: keys and integrations${N} (one file: $SECRETS_FILE; each browser action is shown one at a time and checked)"
   local n8n_host="n8n-$PROJECT.$DOMAIN"
   if [ ! -f "$SECRETS_FILE" ]; then cp "$ROOT/secrets.env.example" "$SECRETS_FILE" && chmod 600 "$SECRETS_FILE" && ok "created $SECRETS_FILE from secrets.env.example"; fi
   # shellcheck disable=SC1090
   set -a; . "$SECRETS_FILE"; set +a
   put() { local k=$1 v=$2; { grep -v "^$k=" "$SECRETS_FILE" || true; } > "$SECRETS_FILE.tmp"; printf '%s=%s\n' "$k" "$v" >> "$SECRETS_FILE.tmp"; mv "$SECRETS_FILE.tmp" "$SECRETS_FILE"; chmod 600 "$SECRETS_FILE"; }
-  say ""
-  say "  ${B}Slack${N} (approval cards and notifications). On your laptop: https://api.slack.com/apps > Create New App > From a manifest;"
-  say "  paste n8n/slack-app-manifest.json with N8N_HOST replaced by $n8n_host, install the app to the workspace,"
-  say "  copy the Bot User OAuth Token (xoxb-…). Create the channels"
-  say "  #assistant-ingestion #assistant-documents #assistant-approvals #assistant-tickets #assistant-knowledge-gaps and invite the app to each."
-  need_key SLACK_BOT_TOKEN "Bot User OAuth Token" '^xoxb-' "it starts with xoxb-" "Slack (approval cards, notifications)" || return 1
-  say ""
-  say "  ${B}Tavus${N} (avatar video). On your laptop: https://platform.tavus.io > developer settings > API key. Free plan: 25 minutes a month, one stream."
-  need_key TAVUS_API_KEY "Tavus API key" '^[A-Za-z0-9_-]{16,}$' "the key from the Tavus developer settings" "the avatar video" || return 1
-  say ""
-  say "  ${B}Google Docs${N} (transcript archival, no sign-in). On your laptop, in Google Cloud console: a project; APIs & Services > Library:"
-  say "  enable the Google Drive API; IAM & Admin > Service Accounts > Create service account (any name, no roles) > Keys > Add key > JSON."
-  say "  Open the downloaded key file in a text editor and paste its whole content here when asked (typed text stays hidden)."
-  say "  In Google Drive create a folder for transcripts, share it with the service account's e-mail (client_email in the key file) as Editor;"
-  say "  the folder id is the part of its URL after /folders/."
+  local v r
+
+  # ---- n8n owner --------------------------------------------------------------------------
+  say ""; say "  ${B}n8n owner account${N} (created by the chart's n8n-setup job; nothing to do in the n8n UI)"
+  local cl_email cl_pass; cl_email=$(oc get secret assistant-n8n -n "$PROJECT" -o jsonpath='{.data.N8N_OWNER_EMAIL}' 2>/dev/null | base64 -d); cl_pass=$(oc get secret assistant-n8n -n "$PROJECT" -o jsonpath='{.data.N8N_OWNER_PASSWORD}' 2>/dev/null | base64 -d)
+  if [ -n "$cl_pass" ]; then
+    # the account exists (or will, with these values): the cluster's values win and go into the file
+    { [ "${N8N_OWNER_EMAIL:-}" = "$cl_email" ] && [ "${N8N_OWNER_PASSWORD:-}" = "$cl_pass" ]; } || { put N8N_OWNER_EMAIL "$cl_email"; put N8N_OWNER_PASSWORD "$cl_pass"; N8N_OWNER_EMAIL=$cl_email; N8N_OWNER_PASSWORD=$cl_pass; }
+    ok "n8n owner $cl_email; the password is in $SECRETS_FILE (N8N_OWNER_PASSWORD). To change it, use the n8n UI (Settings > Personal), then update the file"
+  else
+    if [ -n "${N8N_OWNER_EMAIL:-}" ] && [ -n "${N8N_OWNER_PASSWORD:-}" ]; then ok "n8n owner ${N8N_OWNER_EMAIL} from the file"
+    elif [ "$YES" = 1 ]; then note "n8n owner admin@example.com with a generated password (both stored in secret assistant-n8n and written to $SECRETS_FILE by the next run)"
+    else
+      ask v "5o. E-mail for the n8n owner account (the login of the n8n UI)" "${N8N_OWNER_EMAIL:-admin@example.com}"
+      while ! [[ "$v" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; do say "     ${Y}that is not an e-mail address${N}"; ask v "    E-mail for the n8n owner account" "admin@example.com"; done
+      put N8N_OWNER_EMAIL "$v"; N8N_OWNER_EMAIL=$v
+      while :; do
+        read -rs -p "      Password for $v (at least 8 characters with a number and a capital letter; Enter generates one): " v2; echo
+        if [ -z "$v2" ]; then v2="Aa1$(openssl rand -hex 5)"; ok "password generated"; break; fi
+        [ "${#v2}" -ge 8 ] && [[ "$v2" =~ [0-9] ]] && [[ "$v2" =~ [A-Z] ]] && break
+        say "     ${Y}n8n needs at least 8 characters, a number and a capital letter${N}"
+      done
+      put N8N_OWNER_PASSWORD "$v2"; N8N_OWNER_PASSWORD=$v2
+      ok "n8n owner $N8N_OWNER_EMAIL; the password is in $SECRETS_FILE (N8N_OWNER_PASSWORD)"
+    fi
+  fi
+
+  # ---- Slack ------------------------------------------------------------------------------
+  say ""; say "  ${B}Slack${N} (approval cards and notifications; n8n's Slack credential is created from the token by the chart)"
+  local manifest="$HOME/slack-app-manifest.json"
+  sed "s/N8N_HOST/$n8n_host/" "$ROOT/n8n/slack-app-manifest.json" > "$manifest"
+  if [ -n "${SLACK_BOT_TOKEN:-}" ]; then ok "SLACK_BOT_TOKEN already in the file"; else
+    say "  5a. On your laptop open https://api.slack.com/apps > Create New App > From a manifest > choose the workspace,"
+    say "      paste the manifest below (also saved as $manifest) and create the app:"
+    sed 's/^/        /' "$manifest"
+    pause "" || skipped SLACK_BOT_TOKEN "Slack"
+  fi
+  while :; do
+    [ -n "${SLACK_BOT_TOKEN:-}" ] || { need_key SLACK_BOT_TOKEN "5b. Install App > Install to Workspace, then paste the Bot User OAuth Token" '^xoxb-' "it starts with xoxb-" "Slack (approval cards, notifications)"; }
+    [ -n "${SLACK_BOT_TOKEN:-}" ] || break
+    r=$(slack_api auth.test)
+    if [ "$(printf '%s' "$r" | jq -r '.ok')" = "true" ]; then ok "Slack: app '$(printf '%s' "$r" | jq -r .user)' in workspace '$(printf '%s' "$r" | jq -r .team)'"; break; fi
+    say "     ${Y}Slack rejects that token${N} ($(printf '%s' "$r" | jq -r '.error // "no answer"')); paste it again, or type Skip"
+    put SLACK_BOT_TOKEN ""; unset SLACK_BOT_TOKEN
+  done
+  if [ -n "${SLACK_BOT_TOKEN:-}" ]; then
+    # channels: create the missing ones and join them (scopes channels:manage, channels:join from the manifest);
+    # an app installed with fewer scopes gets the instruction instead
+    local chans; chans=$(slack_api "conversations.list?types=public_channel&exclude_archived=true&limit=999")
+    local c missing=() notmember=()
+    for c in assistant-ingestion assistant-documents assistant-approvals assistant-tickets assistant-knowledge-gaps; do
+      case "$(printf '%s' "$chans" | jq -r --arg c "$c" '.channels[]? | select(.name==$c) | .is_member')" in
+        true) ;; false) notmember+=("$c");; *) missing+=("$c");; esac
+    done
+    for c in "${missing[@]}"; do
+      r=$(slack_api conversations.create -X POST -H 'Content-Type: application/json' -d "{\"name\":\"$c\"}")
+      if [ "$(printf '%s' "$r" | jq -r .ok)" = "true" ]; then ok "channel #$c created (the app is a member)"; else warn "cannot create #$c ($(printf '%s' "$r" | jq -r .error)); create it in Slack and invite the app"; notmember+=("$c"); fi
+    done
+    for c in "${notmember[@]}"; do
+      local id; id=$(slack_api "conversations.list?types=public_channel&exclude_archived=true&limit=999" | jq -r --arg c "$c" '.channels[]? | select(.name==$c) | .id')
+      r=$([ -n "$id" ] && slack_api conversations.join -X POST -H 'Content-Type: application/json' -d "{\"channel\":\"$id\"}" || echo '{"ok":false,"error":"channel_not_found"}')
+      if [ "$(printf '%s' "$r" | jq -r .ok)" = "true" ]; then ok "app joined #$c"; else
+        pause "  5c. In Slack, create the channel #$c (if missing) and invite the app to it: /invite @Enterprise Assistant" || true
+      fi
+    done
+    [ "${#missing[@]}" = 0 ] && [ "${#notmember[@]}" = 0 ] && ok "channels #assistant-ingestion #assistant-documents #assistant-approvals #assistant-tickets #assistant-knowledge-gaps exist and the app is in each"
+    # the request URL contains this cluster's domain: set by the manifest for a new app, by hand for a reused one
+    if [ "${SLACK_INTERACTIVITY_HOST:-}" = "$n8n_host" ]; then ok "Interactivity request URL confirmed for $n8n_host"
+    elif [ "$YES" = 1 ]; then warn "check the app's Interactivity request URL: https://$n8n_host/webhook/slack-interactions"
+    else
+      if confirm "5d. Was the app created just now from the manifest above (its request URL then already points to this cluster)?"; then save SLACK_INTERACTIVITY_HOST "$n8n_host"; ok "Interactivity request URL set by the manifest"
+      else
+        pause "  5d. In the app's settings, Interactivity & Shortcuts, set the Request URL to https://$n8n_host/webhook/slack-interactions and Save Changes." && { save SLACK_INTERACTIVITY_HOST "$n8n_host"; ok "Interactivity request URL confirmed"; } || warn "request URL not confirmed: approval buttons in Slack will not reach n8n until it is set"
+      fi
+    fi
+  fi
+
+  # ---- Tavus ------------------------------------------------------------------------------
+  say ""; say "  ${B}Tavus${N} (avatar video). Free plan: 25 conversational minutes a month, one stream."
+  while :; do
+    [ -n "${TAVUS_API_KEY:-}" ] && ok "TAVUS_API_KEY already in the file" || need_key TAVUS_API_KEY "5e. On your laptop open https://platform.tavus.io > API Keys > Create, then paste the key" '^[A-Za-z0-9_-]{16,}$' "the key from the Tavus API Keys page" "the avatar video"
+    [ -n "${TAVUS_API_KEY:-}" ] || break
+    local code; code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -H "x-api-key: $TAVUS_API_KEY" https://tavusapi.com/v2/replicas)
+    case "$code" in 200) ok "Tavus accepts the key"; break;; 401|403) say "     ${Y}Tavus rejects that key${N} (HTTP $code); paste it again, or type Skip"; put TAVUS_API_KEY ""; unset TAVUS_API_KEY;; *) warn "Tavus not reachable from here (HTTP $code); keeping the key unverified"; break;; esac
+  done
+
+  # ---- Google ----------------------------------------------------------------------------
+  say ""; say "  ${B}Google Docs${N} (transcript archival). A service account writes the documents: no OAuth client, no redirect URL, no sign-in."
   local sa_file="$STATE_DIR/google-sa.json"
   sa_email() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d.get("client_email") and d.get("private_key"); print(d["client_email"])' "$1" 2>/dev/null; }
   if [ -n "${GOOGLE_SERVICE_ACCOUNT_FILE:-}" ] && [ -n "$(sa_email "${GOOGLE_SERVICE_ACCOUNT_FILE/#\~/$HOME}")" ]; then
@@ -386,8 +485,12 @@ step5() {
   elif [ "$YES" = 1 ]; then
     skipped GOOGLE_SERVICE_ACCOUNT_FILE "transcript archival to Google Docs"
   else
+    say "  5f. On your laptop open https://console.cloud.google.com : create or pick a project;"
+    say "      APIs & Services > Library > enable the Google Drive API;"
+    say "      IAM & Admin > Service Accounts > Create service account (any name, no roles) > Keys > Add key > Create new key > JSON."
+    say "      Open the downloaded key file in a text editor."
     while :; do
-      say "  Paste the JSON key now and finish with a line containing only }  (or type a path to the file, or Skip):"
+      say "  5g. Paste the JSON key now and finish with a line containing only }  (or type a path to the file, or Skip):"
       local buf="" line first=1 path="" skip=0
       while IFS= read -rs line; do
         if [ "$first" = 1 ]; then
@@ -402,29 +505,40 @@ step5() {
       echo
       [ "$skip" = 0 ] || { skipped GOOGLE_SERVICE_ACCOUNT_FILE "transcript archival to Google Docs"; break; }
       if [ -n "$path" ]; then
-        if [ -n "$(sa_email "$path")" ]; then put GOOGLE_SERVICE_ACCOUNT_FILE "$path"; ok "service account $(sa_email "$path") from $path; share the Drive folder with that address"; break; fi
-        say "     ${Y}$path is not a readable service account key${N}; paste the key's content or another path, or type Skip"; continue
+        if [ -n "$(sa_email "$path")" ]; then cp "$path" "$sa_file" && chmod 600 "$sa_file"; else say "     ${Y}$path is not a readable service account key${N}; paste the key's content or another path, or type Skip"; continue; fi
+      else
+        [ -n "$buf" ] || { say "     ${Y}the key is needed${N}: paste everything from { to } (or type Skip)"; continue; }
+        printf '%s' "$buf" > "$sa_file.tmp"
+        if [ -n "$(sa_email "$sa_file.tmp")" ]; then mv "$sa_file.tmp" "$sa_file" && chmod 600 "$sa_file"; else rm -f "$sa_file.tmp"; say "     ${Y}that was not a service account key${N} (expected JSON with client_email and private_key); paste it again, or type Skip"; continue; fi
       fi
-      [ -n "$buf" ] || { say "     ${Y}the key is needed${N}: open the downloaded JSON file and paste everything from { to } (or type Skip)"; continue; }
-      if printf '%s' "$buf" > "$sa_file.tmp" && [ -n "$(sa_email "$sa_file.tmp")" ]; then
-        mv "$sa_file.tmp" "$sa_file" && chmod 600 "$sa_file" && put GOOGLE_SERVICE_ACCOUNT_FILE "$sa_file"
-        ok "service account key saved to $sa_file ($(sa_email "$sa_file")); share the Drive folder with that address"; break
-      fi
-      rm -f "$sa_file.tmp"; say "     ${Y}that was not a service account key${N} (expected JSON with client_email and private_key); paste it again, or type Skip"
+      local tok; tok=$(google_token "$sa_file")
+      case "$tok" in ERROR*) say "     ${Y}Google rejects that key${N} (${tok#ERROR }); a deleted key or a disabled service account; paste another, or type Skip"; continue;; esac
+      put GOOGLE_SERVICE_ACCOUNT_FILE "$sa_file"; GOOGLE_SERVICE_ACCOUNT_FILE="$sa_file"
+      ok "Google accepts the key; service account $(sa_email "$sa_file")"; break
     done
   fi
   if [ -n "${GOOGLE_DOCS_FOLDER_ID:-}" ]; then ok "GOOGLE_DOCS_FOLDER_ID already in the file"
   elif [ "$YES" = 1 ] || [ -z "${GOOGLE_SERVICE_ACCOUNT_FILE:-}" ]; then skipped GOOGLE_DOCS_FOLDER_ID "transcript archival to Google Docs"
   else
+    say "  5h. In Google Drive create a folder for the transcripts and share it with $(sa_email "${GOOGLE_SERVICE_ACCOUNT_FILE/#\~/$HOME}") as Editor."
     while :; do
-      read -r -p "  Drive folder id (the part of the folder URL after /folders/; the whole URL is fine too; Skip to leave it out): " v
+      read -r -p "      Paste the folder's URL or id (Skip to leave it out): " v
       is_skip "$v" && { skipped GOOGLE_DOCS_FOLDER_ID "transcript archival to Google Docs"; break; }
       v="${v##*/folders/}"; v="${v%%[?#]*}"; v="${v// /}"
-      [ -n "$v" ] || { say "     ${Y}the folder id is needed${N}: open the shared folder in Google Drive and copy its URL (or type Skip)"; continue; }
+      [ -n "$v" ] || { say "     ${Y}the folder is needed${N}: open it in Google Drive and copy its URL (or type Skip)"; continue; }
       [[ "$v" =~ ^[A-Za-z0-9_-]{10,}$ ]] || { say "     ${Y}that does not look like a folder id${N} (letters, digits, - and _); try again, or type Skip"; continue; }
-      put GOOGLE_DOCS_FOLDER_ID "$v"; GOOGLE_DOCS_FOLDER_ID="$v"; ok "GOOGLE_DOCS_FOLDER_ID saved to $SECRETS_FILE"; break
+      local tok; tok=$(google_token "${GOOGLE_SERVICE_ACCOUNT_FILE/#\~/$HOME}")
+      case "$tok" in ERROR*) warn "cannot verify the folder (${tok#ERROR }); keeping the id unverified"; put GOOGLE_DOCS_FOLDER_ID "$v"; GOOGLE_DOCS_FOLDER_ID="$v"; break;; esac
+      r=$(curl -s --max-time 20 -H "Authorization: Bearer $tok" "https://www.googleapis.com/drive/v3/files/$v?supportsAllDrives=true&fields=id,name,mimeType,capabilities(canAddChildren)")
+      if [ "$(printf '%s' "$r" | jq -r '.mimeType')" = "application/vnd.google-apps.folder" ] && [ "$(printf '%s' "$r" | jq -r '.capabilities.canAddChildren')" = "true" ]; then
+        put GOOGLE_DOCS_FOLDER_ID "$v"; GOOGLE_DOCS_FOLDER_ID="$v"; ok "folder '$(printf '%s' "$r" | jq -r .name)' is shared with the service account as Editor"; break
+      fi
+      local reason; reason=$(printf '%s' "$r" | jq -r '.error.message // .error.status // "no folder with that id is visible to the service account"' | cut -c1-140)
+      say "     ${Y}the service account cannot write to that folder${N}: $reason"
+      say "     share the folder with $(sa_email "${GOOGLE_SERVICE_ACCOUNT_FILE/#\~/$HOME}") as Editor (and check the Drive API is enabled), then paste the URL again, or type Skip"
     done
   fi
+
   if [ "${PROFILE:-}" = remote ]; then
     say ""; say "  ${B}Remote model keys${N} for the endpoints of step 2."
     for k in LLM_API_KEY STT_API_KEY EMBEDDINGS_API_KEY; do need_key "$k" "$k" '.' "" "the remote model behind it" || return 1; done
@@ -483,7 +597,7 @@ step7() {
     bad "inactive workflows above; oc logs deploy/n8n -n $PROJECT -c import-workflows shows why they were not published"; return 1
   fi
   ok "every workflow is active"
-  note "n8n UI: $N8N_URL, owner $(oc get secret assistant-n8n -n "$PROJECT" -o jsonpath='{.data.N8N_OWNER_EMAIL}' | base64 -d), password: oc extract secret/assistant-n8n -n $PROJECT --keys=N8N_OWNER_PASSWORD --to=-"
+  note "n8n UI: $N8N_URL, login $(oc get secret assistant-n8n -n "$PROJECT" -o jsonpath='{.data.N8N_OWNER_EMAIL}' | base64 -d), password: N8N_OWNER_PASSWORD in $SECRETS_FILE (also: oc extract secret/assistant-n8n -n $PROJECT --keys=N8N_OWNER_PASSWORD --to=-)"
   mark 7
 }
 step8() {
@@ -506,9 +620,9 @@ step9() {
   local llm_set=(); [ -f "$HOME/assistant-cluster.env" ] && { . "$HOME/assistant-cluster.env"; llm_set=(--set "models.llm.endpoint=$LLM_ENDPOINT" --set "models.llm.servedModelName=$LLM_MODEL"); }
   say "  \$ NS=$PROJECT scripts/demo-preflight.sh -f chart/values-demo-cluster.yaml ${extra[*]:-} --set global.domain=$DOMAIN ${llm_set[*]:-}"
   if NS="$PROJECT" "$ROOT/scripts/demo-preflight.sh" -f "$ROOT/chart/values-demo-cluster.yaml" "${extra[@]}" --set "global.domain=$DOMAIN" "${llm_set[@]}"; then
-    mark 9; say ""; say "  ${G}Ready for the demo.${N}"; say "  frontend $FRONTEND_URL"; say "  n8n      $N8N_URL"
+    mark 9; say ""; say "  ${G}Ready for the demo.${N}"; say "  frontend $FRONTEND_URL"; say "  n8n      $N8N_URL (login $(oc get secret assistant-n8n -n "$PROJECT" -o jsonpath='{.data.N8N_OWNER_EMAIL}' 2>/dev/null | base64 -d), password N8N_OWNER_PASSWORD in $SECRETS_FILE)"
     say "  Walk through docs/demo-script.md: a cited text answer, a voice session (the browser asks for the microphone), a request by voice with its Slack card, the archive button."
-    say "  Manual, once per cluster: at api.slack.com/apps set the app's Interactivity request URL to $N8N_URL/webhook/slack-interactions (it contains this cluster's domain)."
+    [ "${SLACK_INTERACTIVITY_HOST:-}" = "n8n-$PROJECT.$DOMAIN" ] || say "  Check once: the Slack app's Interactivity request URL must be $N8N_URL/webhook/slack-interactions (step 5 asks about it)."
     say "  Next cluster: clone, scripts/setup.sh."
   else bad "preflight reported problems (docs/troubleshooting.md); fix and run: scripts/setup.sh --step 9"; return 1; fi
 }

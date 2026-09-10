@@ -7,6 +7,7 @@ cluster where the owner was created by hand with another password.
 """
 
 import base64
+import contextlib
 import http.cookiejar
 import json
 import os
@@ -170,9 +171,7 @@ if __name__ == "__main__":
         sys.exit(main())
     except urllib.error.HTTPError as exc:
         detail = ""
-        try:
+        with contextlib.suppress(Exception):
             detail = exc.read().decode()[:300]
-        except Exception:  # noqa: BLE001
-            pass
         log(f"{exc.code} from {exc.url}: {detail or exc.reason}")
         sys.exit(1)

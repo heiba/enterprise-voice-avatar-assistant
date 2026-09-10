@@ -14,7 +14,7 @@ step stops.
 scripts/setup.sh            # discover, show the progress, run every remaining step in order
 scripts/setup.sh --status   # discovery and progress only; changes nothing
 scripts/setup.sh --step 6   # run step 6 (again), then stop
-scripts/setup.sh --yes      # never prompt: the keys must already be in ~/secrets.env; the Let's Encrypt e-mail is skipped
+scripts/setup.sh --yes      # never prompt: keys come from ~/secrets.env, missing ones are skipped; no Let's Encrypt e-mail
 scripts/setup.sh --reset    # forget the saved progress; the cluster is not touched
 scripts/setup.sh --help     # the same list
 ```
@@ -123,12 +123,14 @@ run later.
 The only step that needs you in a browser, on your laptop. It creates `~/secrets.env` from
 `secrets.env.example` on the first run, prints what to create for each integration, asks for
 the values with hidden input, writes them into the file, and creates or refreshes the
-secrets in the project with `scripts/create-secrets.sh`. Every value is required: an empty
-answer or one of the wrong shape (a Slack token that does not start with `xoxb-`, a pasted
-key that is not a service account JSON, a folder id with other characters) is asked again,
-nothing can be skipped. Values already in the file are not asked again, so a run interrupted
-here continues where it stopped. With `--yes` nothing is asked and every value must already
-be in the file.
+secrets in the project with `scripts/create-secrets.sh`. An empty answer or one of the wrong
+shape (a Slack token that does not start with `xoxb-`, a pasted key that is not a service
+account JSON, a folder id with other characters) is asked again; Enter alone never skips.
+To leave an integration out, type `Skip` at its prompt: the step says which feature stays
+off and how to add the key later (put it in `~/secrets.env`, then `--step 5` and `--step 6`).
+Values already in the file are not asked again, so a run interrupted here continues where it
+stopped. With `--yes` nothing is asked: keys in the file are used, missing ones are reported
+as skipped.
 
 | Integration | What to create | What the step asks |
 |---|---|---|

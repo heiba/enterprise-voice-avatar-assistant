@@ -238,9 +238,9 @@ short exercise.
 
 Accounts for the integrations, all free: a Slack workspace where you can create apps and
 channels, a [Tavus](https://platform.tavus.io) account for the avatar (25 conversational
-minutes a month, one stream), and a Google account for Google Docs and Drive. No GitHub or
-Quay account is needed: the images are public on Quay and Argo CD reads this public
-repository.
+minutes a month, one stream), and a Google account with access to Google Cloud console for a
+service account that writes the transcripts to Drive. No GitHub or Quay account is needed:
+the images are public on Quay and Argo CD reads this public repository.
 
 ### Run it
 
@@ -282,14 +282,15 @@ repository.
 | 2 Deployment profile | Uses every GPU found (below). Not enough GPUs or GPU memory for the demo: it stops and states what is required, what the cluster has, and the options | none |
 | 3 Cluster bootstrap | `scripts/bootstrap-cluster.sh`: installs missing operators from `deploy/bootstrap/`, sets KServe to Managed, applies GPU time-slicing, lowers the deployed model's GPU memory share so the others fit, waits for Argo CD, creates the project with its Argo CD and dashboard labels | none, 5 to 15 min |
 | 4 TURN certificate | Copies the cluster's wildcard certificate into the project for TURN over TLS (voice through corporate networks), or asks Let's Encrypt for one through cert-manager if the cluster's is not trusted | an e-mail address in the cert-manager case |
-| 5 Keys and integrations | Creates `~/secrets.env` from `secrets.env.example`, prints what to create on your laptop (Slack app from `n8n/slack-app-manifest.json`, Tavus key, Google Cloud OAuth client and Drive folder) with the URLs that carry the cluster's domain, and asks for each value with hidden input. Nothing is typed into `oc` | the browser work |
+| 5 Keys and integrations | Creates `~/secrets.env` from `secrets.env.example`, prints what to create on your laptop (Slack app from `n8n/slack-app-manifest.json`, Tavus key, a Google Cloud service account key and a shared Drive folder), asks for each value with hidden input, and creates the secrets in the project. Nothing is typed into `oc` | the browser work |
 | 6 Deploy with Argo CD | `scripts/deploy-argocd.sh`: finds the language model, creates the secrets from the file, registers the Argo CD application with the domain, the model endpoint and the profile, waits for the sync, the models and the pods, prints the URLs, runs the connectivity test pod | none, 10 to 20 min |
-| 7 n8n first run | Prints the four browser actions (owner account, Google Docs credential, attach it to WF5 and publish, check that WF1 to WF7 are published); with an n8n API key it verifies the workflows itself | the browser work |
+| 7 n8n workflows | The chart's `n8n-setup` job has created the owner account and an API key; this step reads the key from its secret and checks that WF1 to WF7 are active, then prints where the owner password is | none |
 | 8 Sample documents | `scripts/load-sample-docs.sh`, waits for the ingestion, `scripts/check-index.sh` | none |
 | 9 Verification | `scripts/demo-preflight.sh`: models, Argo CD, test pod, n8n webhooks; then the URLs and the pointer to the demo script | none |
 
 Each step checks the cluster before acting, so work already done by hand or by an earlier
-run is recognised. Steps 5 and 7 are the only ones that need you in a browser.
+run is recognised. Step 5 is the only one that needs you in a browser; n8n itself needs no
+visit: its owner account, API key, Slack credential and workflows are all created by the chart.
 
 ### GPUs and profiles
 
@@ -313,9 +314,9 @@ it holds no domain, no endpoint and no key.
 - **Workflows.** After editing `chart/files/n8n-workflows/`, re-import with
   `N8N_URL=<n8n url> N8N_API_KEY=… scripts/import-workflows.sh`; credentials attached in the
   editor survive.
-- **Next cluster.** Clone, `scripts/setup.sh`, and update the two external URLs that contain the
-  cluster domain: the Slack app's request URL under Interactivity & Shortcuts, and the Google
-  OAuth client's redirect URI. Tokens, keys and the Drive folder stay valid.
+- **Next cluster.** Clone, `scripts/setup.sh`, and update the one external URL that contains the
+  cluster domain: the Slack app's request URL under Interactivity & Shortcuts. Tokens, the
+  service account key and the Drive folder stay valid.
 
 When something fails, the step prints a `debug:` line with the commands that show why, the
 logs are in `~/.assistant-setup/logs/`, and [docs/troubleshooting.md](docs/troubleshooting.md)

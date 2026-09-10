@@ -122,6 +122,15 @@ n8n:
     # Credential id the Slack nodes reference; created from SLACK_BOT_TOKEN in the
     # integrations secret when present. Google Docs (WF5) needs a browser sign-in in n8n.
     slackCredentialId: AssistantSlack01
+  # First-run setup without a browser: a Job creates the owner account from the n8n secret
+  # (N8N_OWNER_EMAIL, N8N_OWNER_PASSWORD, written by scripts/create-secrets.sh) and an API
+  # key stored in apiKeySecret for the scripts. Idempotent; runs after every sync.
+  setup:
+    enabled: true
+    image: registry.access.redhat.com/ubi9/python-312:latest
+    apiKeySecret: assistant-n8n-api
+    ownerFirstName: Assistant
+    ownerLastName: Admin
   resources:
     requests:
       cpu: 250m

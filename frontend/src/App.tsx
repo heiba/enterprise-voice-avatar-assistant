@@ -119,9 +119,10 @@ export default function App() {
   const archive = useCallback(async () => {
     try {
       const result = await api.archiveSession(sessionId);
+      const doc = result.doc_url ? ` Google Doc: ${result.doc_url}` : "";
       const text = result.requested
-        ? "Archiving this conversation: the transcript is being saved to Google Docs and indexed, so later questions can cite it."
-        : "The archival workflow could not be reached; check that n8n is running.";
+        ? `Archiving this conversation: the transcript is being indexed, so later questions can cite it.${doc}`
+        : `The archival workflow could not be reached; check that n8n is running.${doc}`;
       setMessages((m) => [...m, { id: newId(), role: "assistant", content: text, notice: true }]);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);

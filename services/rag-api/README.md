@@ -65,6 +65,7 @@ Environment variables, provided by the Helm chart's config map and secrets. See
 | `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`, `RAG_TOP_K`, `RAG_MIN_SCORE` | retrieval |
 | `DATABASE_URL` | PostgreSQL; without it memory and tickets are disabled |
 | `LIVEKIT_PUBLIC_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | voice tokens |
+| `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_DOCS_FOLDER_ID` | transcript documents in Google Drive (both empty: no document, archival still re-ingests) |
 | `AVATAR_PROVIDER`, `AVATAR_FACES`, `TAVUS_FACE_ID`, `TAVUS_API_KEY`, `TTS_VOICE`, `TTS_VOICE_FEMALE`, `TTS_VOICE_MALE` | face catalog served to the UI |
 | `INGESTION_URL`, `N8N_URL` | neighbours used by classification and request intake |
 | `SERVICE_CA_FILE` | extra CA for in-cluster TLS endpoints |

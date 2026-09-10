@@ -1,0 +1,119 @@
+{{- if and .Values.n8n.enabled .Values.n8n.setup.enabled }}
+{{- /*
+First-run setup of n8n without a browser: creates the owner account from the n8n secret
+(N8N_OWNER_EMAIL, N8N_OWNER_PASSWORD) through the same internal endpoint the setup page
+uses, then creates an API key and stores it in a Secret for the scripts. Runs after every
+sync and does nothing when the owner and a working key already exist.
+*/}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: n8n-setup
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "n8n-setup") | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: n8n-setup
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "n8n-setup") | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: n8n-setup
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "n8n-setup") | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: n8n-setup
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: n8n-setup
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: n8n-setup-script
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "n8n-setup") | nindent 4 }}
+data:
+  setup.py: |
+{{ .Files.Get "files/n8n-setup.py" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: n8n-setup
+  labels:
+    {{- include "assistant.componentLabels" (dict "root" . "name" "n8n-setup") | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 1500
+  template:
+    metadata:
+      labels:
+        {{- include "assistant.componentLabels" (dict "root" . "name" "n8n-setup") | nindent 8 }}
+    spec:
+      serviceAccountName: n8n-setup
+      restartPolicy: OnFailure
+      enableServiceLinks: false
+      containers:
+        - name: setup
+          image: {{ .Values.n8n.setup.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: ["python3", "/scripts/setup.py"]
+          env:
+            - name: N8N_URL
+              value: "http://n8n:5678"
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: API_KEY_SECRET
+              value: {{ .Values.n8n.setup.apiKeySecret | quote }}
+            - name: N8N_OWNER_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.n8n }}
+                  key: N8N_OWNER_EMAIL
+                  optional: true
+            - name: N8N_OWNER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.n8n }}
+                  key: N8N_OWNER_PASSWORD
+                  optional: true
+            - name: N8N_OWNER_FIRST_NAME
+              value: {{ .Values.n8n.setup.ownerFirstName | quote }}
+            - name: N8N_OWNER_LAST_NAME
+              value: {{ .Values.n8n.setup.ownerLastName | quote }}
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            {{- include "assistant.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+      volumes:
+        - name: script
+          configMap:
+            name: n8n-setup-script
+{{- end }}

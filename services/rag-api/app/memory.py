@@ -7,6 +7,7 @@ the chat path keeps working (without memory).
 
 import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -132,18 +133,28 @@ def record_extraction(
     )
 
 
-def request_archive(session_id: str) -> bool:
-    """Ask n8n (WF5) to archive the session transcript: Google Doc, re-ingestion, Slack notice."""
+def request_archive(session_id: str) -> dict:
+    """Archive the session: create the Google Doc here (service account, when configured), then
+    ask n8n (WF5) to re-ingest the transcript and post the Slack notice with the link."""
     import httpx
 
+    from . import gdocs
+
+    text = transcript(session_id)
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M")
+    title = f"Assistant transcript {session_id[:8]} {stamp}"
+    doc_url = gdocs.create_document(title, f"Assistant transcript {session_id}\n\n{text}") if text else None
     url = settings.n8n_url.rstrip("/") + settings.n8n_archive_webhook_path
+    requested = False
     try:
         with httpx.Client(timeout=10) as http:
-            response = http.post(url, json={"session_id": session_id})
+            response = http.post(
+                url, json={"session_id": session_id, "title": title, "doc_url": doc_url or ""}
+            )
         if response.status_code >= 400:
             log.warning("n8n archive webhook returned %s", response.status_code)
-            return False
-        return True
+        else:
+            requested = True
     except httpx.HTTPError as exc:
         log.warning("n8n archive webhook unreachable: %s", exc)
-        return False
+    return {"requested": requested, "doc_url": doc_url}

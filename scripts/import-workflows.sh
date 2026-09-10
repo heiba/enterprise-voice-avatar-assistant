@@ -11,6 +11,8 @@
 #   N8N_URL=https://n8n-<ns>.<domain> N8N_API_KEY=<key from Settings > n8n API> scripts/import-workflows.sh [dir]
 set -euo pipefail
 : "${N8N_URL:?set N8N_URL to the n8n base URL}"
+# the API key created by the chart's n8n-setup job, unless one is given in the environment
+[ -n "${N8N_API_KEY:-}" ] || N8N_API_KEY=$(oc get secret assistant-n8n-api -n "${NS:-${NAMESPACE:-voice-avatar-assistant}}" -o jsonpath='{.data.N8N_API_KEY}' 2>/dev/null | base64 -d 2>/dev/null || true)
 : "${N8N_API_KEY:?create an API key in n8n under Settings > n8n API and export N8N_API_KEY}"
 DIR="${1:-$(dirname "$0")/../chart/files/n8n-workflows}"
 

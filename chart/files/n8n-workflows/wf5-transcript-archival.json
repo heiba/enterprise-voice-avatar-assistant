@@ -46,7 +46,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const sid = $('Archive transcript').first().json.body.session_id;\nconst transcript = $input.first().json.transcript || '';\nconst date = new Date().toISOString().slice(0, 16).replace('T', ' ');\nreturn [{ json: { session_id: sid, title: `Assistant transcript ${sid.slice(0, 8)} ${date}`, transcript: `# Assistant transcript ${sid}\\n\\n${transcript}`, google_folder: $env.GOOGLE_DOCS_FOLDER_ID || '' } }];"
+        "jsCode": "// The RAG API already created the Google Doc (service account) and sent its link along.\nconst body = $('Archive transcript').first().json.body || {};\nconst sid = body.session_id;\nconst transcript = $input.first().json.transcript || '';\nconst date = new Date().toISOString().slice(0, 16).replace('T', ' ');\nreturn [{ json: { session_id: sid, title: body.title || `Assistant transcript ${sid.slice(0, 8)} ${date}`, transcript: `# Assistant transcript ${sid}\\n\\n${transcript}`, doc_url: body.doc_url || '' } }];"
       },
       "id": "9ec06b11-8a8b-5b79-b002-c0a50f1a7551",
       "name": "Prepare document",
@@ -56,79 +56,6 @@
         520,
         0
       ]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "8acf7cda-0436-505c-a1e9-5ff49798dff8",
-              "leftValue": "={{ $json.google_folder }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "28bf63b5-c1c0-5a53-bce2-2923ad944581",
-      "name": "Google Docs configured?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        780,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "folderId": "={{ $json.google_folder }}",
-        "title": "={{ $json.title }}"
-      },
-      "id": "26c8e46c-2555-5773-a2a5-4d54092f051a",
-      "name": "Create Google Doc",
-      "type": "n8n-nodes-base.googleDocs",
-      "typeVersion": 2,
-      "position": [
-        1040,
-        -140
-      ],
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "operation": "update",
-        "documentURL": "={{ $json.id }}",
-        "actionsUi": {
-          "actionFields": [
-            {
-              "object": "text",
-              "action": "insert",
-              "text": "={{ $('Prepare document').first().json.transcript }}"
-            }
-          ]
-        }
-      },
-      "id": "a9e94c6f-9d33-5a6e-9afa-1fb692f4f98a",
-      "name": "Write transcript to Doc",
-      "type": "n8n-nodes-base.googleDocs",
-      "typeVersion": 2,
-      "position": [
-        1300,
-        -140
-      ],
-      "continueOnFail": true
     },
     {
       "parameters": {
@@ -191,7 +118,7 @@
           "value": "#assistant-ingestion"
         },
         "otherOptions": {},
-        "text": "=:memo: Transcript of session {{ $('Restore transcript').first().json.session_id.slice(0, 8) }} archived{{ $('Restore transcript').first().json.doc_url ? ' to <' + $('Restore transcript').first().json.doc_url + '|Google Docs>' : '' }} and queued for re-ingestion (job {{ $json.job_id }})."
+        "text": "=:memo: Transcript of session {{ $('Prepare document').first().json.session_id.slice(0, 8) }} archived{{ $('Prepare document').first().json.doc_url ? ' to <' + $('Prepare document').first().json.doc_url + '|Google Docs>' : '' }} and queued for re-ingestion (job {{ $json.job_id }})."
       },
       "id": "b35c1fcd-6ee0-5963-ab17-643447bd2f36",
       "name": "Notify archival",
@@ -208,19 +135,6 @@
           "name": "Slack account"
         }
       }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Both branches land here: after the Google Docs write (whose output is the Docs API\n// response) or straight from the If node when no folder is configured. Restore the\n// prepared transcript and keep the Google Doc link when one was created.\nconst base = $('Prepare document').first().json;\nconst docId = $json.documentId || (($json.mimeType || '').includes('document') ? $json.id : '') || '';\nreturn [{ json: { ...base, doc_url: docId ? `https://docs.google.com/document/d/${docId}/edit` : '' } }];"
-      },
-      "id": "3f6c2b1e-7d4a-5c9e-8a21-6b0e9d4c5f10",
-      "name": "Restore transcript",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1560,
-        0
-      ]
     }
   ],
   "connections": {
@@ -250,47 +164,7 @@
       "main": [
         [
           {
-            "node": "Google Docs configured?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Docs configured?": {
-      "main": [
-        [
-          {
-            "node": "Create Google Doc",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Restore transcript",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create Google Doc": {
-      "main": [
-        [
-          {
-            "node": "Write transcript to Doc",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Write transcript to Doc": {
-      "main": [
-        [
-          {
-            "node": "Restore transcript",
+            "node": "Transcript to file",
             "type": "main",
             "index": 0
           }
@@ -313,17 +187,6 @@
         [
           {
             "node": "Notify archival",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Restore transcript": {
-      "main": [
-        [
-          {
-            "node": "Transcript to file",
             "type": "main",
             "index": 0
           }

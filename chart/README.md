@@ -144,6 +144,11 @@ Datastores and infrastructure. All run under the restricted SCC (no fixed UID).
 | `n8n.workflows.autoImport` | `true` | Import the workflows in chart/files/n8n-workflows and publish them when n8n starts. |
 | `n8n.workflows.importPolicy` | `once` | once: first start only (marker on the data volume); onChange: whenever the shipped files change (overwrites edits made in the editor); always: every start. |
 | `n8n.workflows.slackCredentialId` | `AssistantSlack01` | Credential id the Slack nodes reference; created from SLACK_BOT_TOKEN in the integrations secret when present. Google Docs (WF5) needs a browser sign-in in n8n. |
+| `n8n.setup.enabled` | `true` | Deploy this component. |
+| `n8n.setup.image` | `registry.access.redhat.com/ubi9/python-312:latest` | Container image (full reference). |
+| `n8n.setup.apiKeySecret` | `assistant-n8n-api` |  |
+| `n8n.setup.ownerFirstName` | `Assistant` |  |
+| `n8n.setup.ownerLastName` | `Admin` |  |
 | `n8n.resources.requests.cpu` | `250m` | CPU request. |
 | `n8n.resources.requests.memory` | `512Mi` | Memory request. |
 | `n8n.resources.limits.cpu` | `"1"` | CPU limit. |

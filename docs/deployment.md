@@ -58,7 +58,7 @@ helm install assistant chart --namespace ${PROJECT} \
 
 The two options mix per model, for example a MaaS LLM with Whisper deployed locally. For longer configurations copy `chart/values.yaml`, edit it, and pass it with `-f my-values.yaml`. Guardrails, the avatar provider, and the integrations are configured through the same file. Every value with its default and meaning is listed in [chart/README.md](../chart/README.md).
 
-5. The n8n workflows are imported and published automatically when n8n starts (the `n8n.workflows` values control this). If `SLACK_BOT_TOKEN` was in the integrations secret at install time, the Slack nodes are wired too; otherwise open the n8n Route, add a Slack credential, and attach it. Google Docs (transcript archival) always needs a one-time sign-in in n8n. To update workflows later, edit `chart/files/n8n-workflows/` and run `scripts/import-workflows.sh`.
+5. The n8n workflows are imported and published automatically when n8n starts (the `n8n.workflows` values control this), the Slack credential is created from `SLACK_BOT_TOKEN`, and the `n8n-setup` job creates the owner account (credentials in the `assistant-n8n` secret) and an API key (secret `assistant-n8n-api`) that the scripts use. Google Docs needs no credential in n8n: the RAG API writes the documents with a service account. To update workflows later, edit `chart/files/n8n-workflows/` and run `scripts/import-workflows.sh`.
 
 ```bash
 echo https://$(oc get route/n8n -n ${PROJECT} --template='{{.spec.host}}')
@@ -96,7 +96,7 @@ Everything below is optional; the assistant runs without any of it. Keys go into
 
 **Slack (notifications and approvals).** Create an app from `n8n/slack-app-manifest.json` (in the repository root) at [api.slack.com/apps](https://api.slack.com/apps) (*Create New App*, *From a manifest*). Under *OAuth & Permissions* install it to the workspace and copy the *Bot User OAuth Token* (`xoxb-…`) into the secret as `SLACK_BOT_TOKEN`; n8n creates its Slack credential from it on first start. Under *Interactivity & Shortcuts* set the request URL to `https://<n8n host>/webhook/slack-interactions` and keep Socket Mode off. Create the channels `#assistant-ingestion`, `#assistant-documents`, `#assistant-approvals`, `#assistant-tickets`, and `#assistant-knowledge-gaps`, and invite the app to each.
 
-**Google Docs (transcript archival).** In [Google Cloud console](https://console.cloud.google.com) create a project, enable the *Google Docs API* and *Google Drive API*, configure the OAuth consent screen as *External* and add yourself as a test user, then create an *OAuth client ID* of type *Web application* whose authorized redirect URI is `https://<n8n host>/rest/oauth2-credential/callback`. In n8n add a *Google Docs OAuth2 API* credential with the client ID and secret and sign in. Create a Drive folder for transcripts and set its ID (the part of the URL after `/folders/`) in values as `n8n.extraEnv.GOOGLE_DOCS_FOLDER_ID`. While the consent screen stays in *Testing*, Google expires the sign-in after seven days; publishing the app removes that limit.
+**Google Docs (transcript archival).** The RAG API creates the transcript document through the Drive API with a Google Cloud service account, so no OAuth client, consent screen or sign-in is needed. In [Google Cloud console](https://console.cloud.google.com) create a project, enable the *Google Drive API*, create a service account (no roles needed) and download a JSON key for it. In Google Drive create a folder for the transcripts and share it with the service account's e-mail address (`client_email` in the key file) as Editor. Put the key file's path in `secrets.env` as `GOOGLE_SERVICE_ACCOUNT_FILE` (the secrets script stores its content as `GOOGLE_SERVICE_ACCOUNT_JSON`) and the folder id, the part of the folder URL after `/folders/`, as `GOOGLE_DOCS_FOLDER_ID`. The archival workflow (WF5) receives the document link from the RAG API and only re-ingests the transcript and posts to Slack.
 
 **Simli and Hedra (alternative avatar providers).** Same pattern as Tavus with `SIMLI_API_KEY` and `SIMLI_FACE_ID`, or `HEDRA_API_KEY` and `HEDRA_AVATAR_IMAGE`, and the matching `voiceAgent.avatarProvider`.
 
@@ -108,7 +108,7 @@ Everything below is optional; the assistant runs without any of it. Keys go into
 |---|---|
 | `assistant-postgres` | `POSTGRESQL_USER`, `POSTGRESQL_PASSWORD`, `POSTGRESQL_DATABASE`, `DATABASE_URL` |
 | `assistant-minio` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` |
-| `assistant-n8n` | `N8N_ENCRYPTION_KEY` |
+| `assistant-n8n` | `N8N_ENCRYPTION_KEY`, `N8N_OWNER_EMAIL`, `N8N_OWNER_PASSWORD` (the owner account the `n8n-setup` job creates; the job also writes the API key it creates into `assistant-n8n-api`) |
 | `assistant-qdrant` | `QDRANT_API_KEY` |
 | `assistant-livekit` | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` |
 | `assistant-models` | `LLM_API_KEY`, `STT_API_KEY`, `TTS_API_KEY`, `EMBEDDINGS_API_KEY`, `GUARDRAILS_API_KEY`, `HF_TOKEN` |

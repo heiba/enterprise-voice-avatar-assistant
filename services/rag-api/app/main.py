@@ -123,6 +123,7 @@ def info():
             "min_score": settings.rag_min_score,
         },
         "memory": memory.enabled(),
+        "archival": {"google_docs": __import__("app.gdocs", fromlist=["configured"]).configured()},
         "voice": {
             "livekit_url": settings.livekit_public_url or settings.livekit_url,
             "avatar_provider": settings.avatar_provider,
@@ -177,9 +178,10 @@ async def ack_notifications(session_id: str, data: NotificationAck):
 
 @app.post("/v1/sessions/{session_id}/archive", status_code=202)
 async def archive_session(session_id: str):
-    """Hand the session to the transcript archival workflow (Google Doc, re-ingestion, Slack notice)."""
-    requested = await asyncio.to_thread(memory.request_archive, session_id)
-    return {"session_id": session_id, "requested": requested}
+    """Create the Google Doc (when a service account is configured) and hand the session to the
+    archival workflow for re-ingestion and the Slack notice."""
+    result = await asyncio.to_thread(memory.request_archive, session_id)
+    return {"session_id": session_id, "requested": result["requested"], "doc_url": result.get("doc_url")}
 
 
 @app.get("/v1/sessions/{session_id}/transcript", response_class=PlainTextResponse)

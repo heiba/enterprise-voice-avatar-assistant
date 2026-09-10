@@ -8,6 +8,8 @@
 #   --expect N   poll (up to 12 min) until N executions above ID have finished
 set -uo pipefail
 NS="${NS:-$(oc project -q)}"
+# the API key created by the chart's n8n-setup job, unless one is given in the environment
+[ -n "${N8N_API_KEY:-}" ] || N8N_API_KEY=$(oc get secret assistant-n8n-api -n "${NS:-${NAMESPACE:-voice-avatar-assistant}}" -o jsonpath='{.data.N8N_API_KEY}' 2>/dev/null | base64 -d 2>/dev/null || true)
 : "${N8N_API_KEY:?set N8N_API_KEY (Settings > n8n API)}"
 SINCE=0; EXPECT=0; LIMIT=15
 while [ $# -gt 0 ]; do case "$1" in --since) SINCE="$2"; shift 2;; --expect) EXPECT="$2"; shift 2;; --limit) LIMIT="$2"; shift 2;; *) echo "unknown argument $1"; exit 1;; esac; done

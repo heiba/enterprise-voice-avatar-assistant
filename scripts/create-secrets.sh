@@ -13,6 +13,9 @@
 set -euo pipefail
 
 NS="${NAMESPACE:-voice-avatar-assistant}"
+# existing <secret> <key>: the current value in the cluster, so a refresh keeps generated
+# passwords and the n8n encryption key instead of replacing them
+existing() { oc get secret "$1" -n "${NS}" -o jsonpath="{.data.$2}" 2>/dev/null | base64 -d 2>/dev/null || true; }
 if [ -n "${SECRETS_FILE:-}" ]; then
   [ -r "${SECRETS_FILE}" ] || { echo "SECRETS_FILE ${SECRETS_FILE} is not readable"; exit 1; }
   set -a
@@ -23,15 +26,24 @@ if [ -n "${SECRETS_FILE:-}" ]; then
 fi
 rand() { openssl rand -hex "${1:-16}"; }
 
-POSTGRES_USER="${POSTGRES_USER:-assistant}"
-POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(rand 16)}"
-POSTGRES_DB="${POSTGRES_DB:-assistant}"
-MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
-MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-$(rand 16)}"
-N8N_ENCRYPTION_KEY="${N8N_ENCRYPTION_KEY:-$(rand 32)}"
-LIVEKIT_API_KEY="${LIVEKIT_API_KEY:-APIk$(rand 6)}"
-LIVEKIT_API_SECRET="${LIVEKIT_API_SECRET:-$(rand 24)}"
-QDRANT_API_KEY="${QDRANT_API_KEY:-$(rand 24)}"
+POSTGRES_USER="${POSTGRES_USER:-$(existing assistant-postgres POSTGRESQL_USER)}"; POSTGRES_USER="${POSTGRES_USER:-assistant}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(existing assistant-postgres POSTGRESQL_PASSWORD)}"; POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(rand 16)}"
+POSTGRES_DB="${POSTGRES_DB:-$(existing assistant-postgres POSTGRESQL_DATABASE)}"; POSTGRES_DB="${POSTGRES_DB:-assistant}"
+MINIO_ROOT_USER="${MINIO_ROOT_USER:-$(existing assistant-minio MINIO_ROOT_USER)}"; MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
+MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-$(existing assistant-minio MINIO_ROOT_PASSWORD)}"; MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-$(rand 16)}"
+N8N_ENCRYPTION_KEY="${N8N_ENCRYPTION_KEY:-$(existing assistant-n8n N8N_ENCRYPTION_KEY)}"; N8N_ENCRYPTION_KEY="${N8N_ENCRYPTION_KEY:-$(rand 32)}"
+# n8n owner account, created by the chart's n8n-setup Job; the password needs a capital and a digit
+N8N_OWNER_EMAIL="${N8N_OWNER_EMAIL:-$(existing assistant-n8n N8N_OWNER_EMAIL)}"; N8N_OWNER_EMAIL="${N8N_OWNER_EMAIL:-admin@example.com}"
+N8N_OWNER_PASSWORD="${N8N_OWNER_PASSWORD:-$(existing assistant-n8n N8N_OWNER_PASSWORD)}"; N8N_OWNER_PASSWORD="${N8N_OWNER_PASSWORD:-Aa1$(rand 10)}"
+LIVEKIT_API_KEY="${LIVEKIT_API_KEY:-$(existing assistant-livekit LIVEKIT_API_KEY)}"; LIVEKIT_API_KEY="${LIVEKIT_API_KEY:-APIk$(rand 6)}"
+LIVEKIT_API_SECRET="${LIVEKIT_API_SECRET:-$(existing assistant-livekit LIVEKIT_API_SECRET)}"; LIVEKIT_API_SECRET="${LIVEKIT_API_SECRET:-$(rand 24)}"
+QDRANT_API_KEY="${QDRANT_API_KEY:-$(existing assistant-qdrant QDRANT_API_KEY)}"; QDRANT_API_KEY="${QDRANT_API_KEY:-$(rand 24)}"
+# Google service account for transcript archival: the JSON key file, or its content
+if [ -n "${GOOGLE_SERVICE_ACCOUNT_FILE:-}" ]; then
+  [ -r "${GOOGLE_SERVICE_ACCOUNT_FILE}" ] || { echo "GOOGLE_SERVICE_ACCOUNT_FILE ${GOOGLE_SERVICE_ACCOUNT_FILE} is not readable"; exit 1; }
+  GOOGLE_SERVICE_ACCOUNT_JSON="$(cat "${GOOGLE_SERVICE_ACCOUNT_FILE}")"
+fi
+GOOGLE_SERVICE_ACCOUNT_JSON="${GOOGLE_SERVICE_ACCOUNT_JSON:-$(existing assistant-integrations GOOGLE_SERVICE_ACCOUNT_JSON)}"
 
 make_secret() {
   local name="$1"; shift
@@ -57,7 +69,9 @@ make_secret assistant-minio \
   --from-literal=MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD}"
 
 make_secret assistant-n8n \
-  --from-literal=N8N_ENCRYPTION_KEY="${N8N_ENCRYPTION_KEY}"
+  --from-literal=N8N_ENCRYPTION_KEY="${N8N_ENCRYPTION_KEY}" \
+  --from-literal=N8N_OWNER_EMAIL="${N8N_OWNER_EMAIL}" \
+  --from-literal=N8N_OWNER_PASSWORD="${N8N_OWNER_PASSWORD}"
 
 # Optional: used when qdrant.apiKeySecret is set in the chart values.
 make_secret assistant-qdrant \
@@ -89,3 +103,4 @@ make_secret assistant-integrations \
 
 echo
 echo "Secrets are in namespace ${NS}. Back up assistant-n8n: losing N8N_ENCRYPTION_KEY makes the credentials stored in n8n unreadable."
+echo "n8n owner: ${N8N_OWNER_EMAIL} (password: oc extract secret/assistant-n8n -n ${NS} --keys=N8N_OWNER_PASSWORD --to=-)"

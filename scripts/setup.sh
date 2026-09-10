@@ -168,7 +168,7 @@ write_values_object() {  # -> $STATE_DIR/values-object.json, deep-merged over th
 }
 
 # ---------------------------------------------------------------- status --------------------
-STEPS=("Cluster and prerequisites" "Deployment profile" "Cluster bootstrap" "TURN certificate" "Keys and integrations" "Deploy with Argo CD" "n8n first run" "Sample documents" "Verification")
+STEPS=("Cluster and prerequisites" "Deployment profile" "Cluster bootstrap" "TURN certificate" "Keys and integrations" "Deploy with Argo CD" "n8n workflows" "Sample documents" "Verification")
 step_state() {  # prints done|todo|attention and a detail
   case "$1" in
   1) if [ "$LOGGED_IN" != 1 ]; then echo "attention|not logged in to a cluster"; elif [ -z "$RHOAI_VERSION" ]; then echo "attention|OpenShift AI not found";
@@ -180,7 +180,7 @@ step_state() {  # prints done|todo|attention and a detail
   4) if [ "$TURN_SECRET" = yes ]; then echo "done|secret livekit-turn-tls present"; elif [ "$PROJECT_EXISTS" != yes ]; then echo "todo|after the bootstrap"; else echo "todo|secret missing"; fi ;;
   5) if [ "$SECRETS_IN_CLUSTER" = yes ] && [ -n "${STEP_5_DONE:-}" ]; then echo "done|$SECRETS_FILE and the cluster secrets"; elif [ "$SECRETS_IN_CLUSTER" = yes ]; then echo "todo|cluster secrets exist; run to review the keys"; elif [ -f "$SECRETS_FILE" ]; then echo "todo|$SECRETS_FILE exists, not yet applied"; else echo "todo|no $SECRETS_FILE yet"; fi ;;
   6) if [ "$APP_STATE" = "Synced/Healthy" ] && [ "${PODS_NOT_READY:-1}" = 0 ]; then echo "done|application Synced/Healthy, ${ISVC_READY:-0}/${ISVC_TOTAL:-0} models Ready"; elif [ -n "$APP_STATE" ]; then echo "attention|application $APP_STATE, ${PODS_NOT_READY} pod(s) not ready"; else echo "todo|not deployed"; fi ;;
-  7) if [ -n "${STEP_7_DONE:-}" ]; then echo "done|owner, Google Docs credential, workflows published"; elif [ -n "$N8N_URL" ]; then echo "todo|$N8N_URL"; else echo "todo|after the deployment"; fi ;;
+  7) if [ -n "${STEP_7_DONE:-}" ]; then echo "done|owner account, API key, workflows active"; elif [ -n "$N8N_URL" ]; then echo "todo|$N8N_URL"; else echo "todo|after the deployment"; fi ;;
   8) if [ -n "$DOCS_INDEXED" ] && [ "$DOCS_INDEXED" -ge 10 ]; then echo "done|$DOCS_INDEXED documents indexed"; elif [ -n "$DOCS_INDEXED" ]; then echo "todo|$DOCS_INDEXED documents indexed"; else echo "todo|after the deployment"; fi ;;
   9) if [ -n "${STEP_9_DONE:-}" ]; then echo "done|preflight passed $STEP_9_DONE"; else echo "todo|preflight not run"; fi ;;
   esac
@@ -333,10 +333,15 @@ step5() {
   say "  ${B}Tavus${N} (avatar video). On your laptop: https://platform.tavus.io > developer settings > API key. Free plan: 25 minutes a month, one stream."
   if [ -n "${TAVUS_API_KEY:-}" ]; then ok "TAVUS_API_KEY already in the file"; else ask_secret v "Tavus API key"; [ -n "$v" ] && put TAVUS_API_KEY "$v"; fi
   say ""
-  say "  ${B}Google Docs${N} (transcript archival). On your laptop, in Google Cloud console: a project; enable Google Docs API and Google Drive API;"
-  say "  OAuth consent screen External with yourself as test user; Credentials > OAuth client ID > Web application with redirect URI"
-  say "  https://$n8n_host/rest/oauth2-credential/callback  (client id and secret are entered in n8n later, step 7)."
-  say "  In Google Drive create a folder for transcripts; its id is the part of the URL after /folders/."
+  say "  ${B}Google Docs${N} (transcript archival, no sign-in). On your laptop, in Google Cloud console: a project; APIs & Services > Library:"
+  say "  enable the Google Drive API; IAM & Admin > Service Accounts > Create service account (any name, no roles) > Keys > Add key > JSON:"
+  say "  download the key file and copy it to this host, for example: scp <file>.json $(id -un)@$(hostname -f 2>/dev/null || hostname):~/google-sa.json"
+  say "  In Google Drive create a folder for transcripts, share it with the service account's e-mail (client_email in the key file) as Editor;"
+  say "  the folder id is the part of its URL after /folders/."
+  if [ -n "${GOOGLE_SERVICE_ACCOUNT_FILE:-}" ] && [ -r "${GOOGLE_SERVICE_ACCOUNT_FILE/#\~/$HOME}" ]; then ok "GOOGLE_SERVICE_ACCOUNT_FILE already in the file"; else
+    ask v "Path to the service account key file (Enter to skip)" "${GOOGLE_SERVICE_ACCOUNT_FILE:-}"
+    if [ -n "$v" ]; then v="${v/#\~/$HOME}"; [ -r "$v" ] && { put GOOGLE_SERVICE_ACCOUNT_FILE "$v"; ok "service account $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("client_email","?"))' "$v" 2>/dev/null)"; } || warn "$v is not readable; skipped"; fi
+  fi
   if [ -n "${GOOGLE_DOCS_FOLDER_ID:-}" ]; then ok "GOOGLE_DOCS_FOLDER_ID already in the file"; else ask v "Drive folder id (Enter to skip)" ""; [ -n "$v" ] && put GOOGLE_DOCS_FOLDER_ID "$v"; fi
   if [ "${PROFILE:-}" = remote ]; then
     say ""; say "  ${B}Remote model keys${N} for the endpoints of step 2."
@@ -347,12 +352,12 @@ step5() {
   [ "$PROJECT_EXISTS" = yes ] || { bad "project $PROJECT missing; run step 3 first"; return 1; }
   if [ "$SECRETS_IN_CLUSTER" = yes ]; then
     note "rewriting the integrations and model-key secrets in the cluster from the file (passwords are kept)"
-    NAMESPACE="$PROJECT" SECRETS_FILE="$SECRETS_FILE" REFRESH=assistant-integrations,assistant-models "$ROOT/scripts/create-secrets.sh" | sed 's/^/  /' || return 1
+    NAMESPACE="$PROJECT" SECRETS_FILE="$SECRETS_FILE" REFRESH=assistant-integrations,assistant-models,assistant-n8n "$ROOT/scripts/create-secrets.sh" | sed 's/^/  /' || return 1
   else
     note "creating the secrets in $PROJECT from the file (passwords are generated)"
     NAMESPACE="$PROJECT" SECRETS_FILE="$SECRETS_FILE" "$ROOT/scripts/create-secrets.sh" | sed 's/^/  /' || return 1
   fi
-  for key in SLACK_BOT_TOKEN TAVUS_API_KEY GOOGLE_DOCS_FOLDER_ID; do
+  for key in SLACK_BOT_TOKEN TAVUS_API_KEY GOOGLE_SERVICE_ACCOUNT_JSON GOOGLE_DOCS_FOLDER_ID; do
     if [ -n "$(oc get secret assistant-integrations -n "$PROJECT" -o jsonpath="{.data.$key}" 2>/dev/null)" ]; then ok "$key in the cluster"; else warn "$key empty (feature off)"; fi
   done
   mark 5
@@ -372,25 +377,25 @@ step6() {
   bad "deployment reported problems; see $log, fix, and run: scripts/setup.sh --step 6"; return 1
 }
 step7() {
-  say "${B}Step 7: n8n first run${N} (browser, on your laptop)"
+  say "${B}Step 7: n8n${N} (owner account and API key are created by the chart's n8n-setup job; this verifies the workflows)"
   [ -n "$N8N_URL" ] || { bad "n8n route not found; run step 6 first"; return 1; }
-  say "  1. Open $N8N_URL and create the owner account (keep the password with your other secrets)."
-  say "  2. Credentials > Create credential > Google Docs OAuth2 API: paste the client id and secret from Google Cloud, Sign in with Google."
-  say "  3. Open WF5 Transcript archival, select the Google Docs node, pick the credential, save, Publish."
-  say "  4. Overview shows WF1 to WF7 as Published."
-  say "  Optional but recommended: Settings > n8n API > create an API key; this script uses it to verify the workflows and keeps it in $STATE_DIR/n8n.key (never in git)."
-  key=""; [ -f "$STATE_DIR/n8n.key" ] || ask_secret key "n8n API key"
-  if [ -n "$key" ]; then printf '%s' "$key" > "$STATE_DIR/n8n.key"; chmod 600 "$STATE_DIR/n8n.key"; fi
-  if [ -f "$STATE_DIR/n8n.key" ]; then
-    local wf; wf=$(curl -s --max-time 20 -H "X-N8N-API-KEY: $(cat "$STATE_DIR/n8n.key")" "$N8N_URL/api/v1/workflows?limit=50" | jq -r '.data[]? | "\(.active) \(.name)"' 2>/dev/null)
-    if [ -n "$wf" ]; then
-      printf '%s\n' "$wf" | sed 's/^true /  active   /; s/^false /  INACTIVE /'
-      if printf '%s\n' "$wf" | grep -q '^false'; then warn "inactive workflows above: attach the missing credential in the editor and publish, then run: scripts/setup.sh --step 7"; return 1; fi
-      ok "all workflows active"; mark 7; return 0
-    fi
-    warn "could not list workflows with that key (wrong key, or n8n not reachable from here)"
+  local key; key=$(oc get secret assistant-n8n-api -n "$PROJECT" -o jsonpath='{.data.N8N_API_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+  if [ -z "$key" ]; then
+    local job; job=$(oc get job n8n-setup -n "$PROJECT" -o jsonpath='{.status.succeeded}/{.status.failed}' 2>/dev/null)
+    warn "no API key secret yet (job n8n-setup succeeded/failed: ${job:-not run})"
+    note "oc logs job/n8n-setup -n $PROJECT shows what it did; it runs after every Argo CD sync"
+    bad "n8n setup not finished"; return 1
   fi
-  confirm "Owner created, Google credential attached and every workflow Published?" && mark 7
+  ok "API key from secret assistant-n8n-api"
+  local wf; wf=$(curl -s --max-time 20 -H "X-N8N-API-KEY: $key" "$N8N_URL/api/v1/workflows?limit=50" | jq -r '.data[]? | "\(.active) \(.name)"' 2>/dev/null)
+  [ -n "$wf" ] || { bad "n8n did not answer with the key at $N8N_URL/api/v1/workflows"; return 1; }
+  printf '%s\n' "$wf" | sed 's/^true /  active   /; s/^false /  INACTIVE /'
+  if printf '%s\n' "$wf" | grep -q '^false'; then
+    bad "inactive workflows above; oc logs deploy/n8n -n $PROJECT -c import-workflows shows why they were not published"; return 1
+  fi
+  ok "every workflow is active"
+  note "n8n UI: $N8N_URL, owner $(oc get secret assistant-n8n -n "$PROJECT" -o jsonpath='{.data.N8N_OWNER_EMAIL}' | base64 -d), password: oc extract secret/assistant-n8n -n $PROJECT --keys=N8N_OWNER_PASSWORD --to=-"
+  mark 7
 }
 step8() {
   say "${B}Step 8: sample documents${N} (15 policies, procedures, an invoice and a contract)"

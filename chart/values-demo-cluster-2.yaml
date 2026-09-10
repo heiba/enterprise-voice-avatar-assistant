@@ -1,10 +1,9 @@
-# Values for demo cluster 1, a Red Hat Demo Platform "Red Hat OpenShift AI 3" environment,
-# single-node OpenShift 4.20 on one AWS g6 instance with a single NVIDIA L4 (24 GB).
-# Cluster 2 has its own file, values-demo-cluster-2.yaml; scripts/deploy-argocd.sh picks the
-# file with VALUES_FILE.
-# SETUP.md walks through the whole setup. The cluster's apps domain is not stored here:
-# scripts/deploy-argocd.sh passes global.domain to the Argo CD application from the cluster
-# it is logged in to, so this file works unchanged on the next cluster.
+# Values for demo cluster 2, the second Red Hat Demo Platform "Red Hat OpenShift AI 3"
+# environment (single-node OpenShift 4.20, one AWS g6 instance with a single NVIDIA L4).
+# Same content as values-demo-cluster.yaml unless the two clusters differ (instance size,
+# faces, voices); SETUP.md explains which file belongs to which cluster. The apps domain
+# is not stored here: scripts/deploy-argocd.sh passes global.domain to the Argo CD
+# application from the cluster it is logged in to.
 #
 # Application images are built by .github/workflows/build-images.yaml and pushed to
 # quay.io/rh-ai-quickstart. The workflow rewrites the per-service image references below

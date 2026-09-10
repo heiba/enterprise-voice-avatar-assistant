@@ -27,6 +27,8 @@ cluster in sync with the `main` branch. It needs the OpenShift GitOps operator
 4. Watch the sync in the Argo CD UI (route `openshift-gitops-server` in the
    `openshift-gitops` namespace) or with `oc get applications.argoproj.io -n openshift-gitops`.
 
-`application.yaml` points at `values.yaml` plus `values-demo-cluster.yaml`.
-Copy the latter for your own cluster, change the domain and model endpoints,
-and update `valueFiles`. To deploy a different branch, change `targetRevision`.
+`application.yaml` points at `values.yaml` plus `values-demo-cluster.yaml`;
+`scripts/deploy-argocd.sh` replaces the second file with `VALUES_FILE` (one file per
+cluster, `values-demo-cluster-2.yaml` for the second demo cluster) and sets
+`global.domain` as a Helm parameter, so no domain is stored in git. To deploy a
+different branch or a fork, pass `TARGET_REVISION` and `REPO_URL` to the script.

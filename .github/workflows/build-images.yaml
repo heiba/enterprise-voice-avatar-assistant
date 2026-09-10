@@ -68,7 +68,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
   promote:
-    name: promote tags to the demo cluster values
+    name: promote tags to the demo cluster values files
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -83,15 +83,18 @@ jobs:
           import re, sys, pathlib
           tag, registry, prefix = sys.argv[1], sys.argv[2], sys.argv[3]
           services = {"ingestion": "ingestion", "ragApi": "rag-api", "frontend": "frontend", "voiceAgent": "voice-agent"}   # values key -> image name suffix
-          p = pathlib.Path("chart/values-demo-cluster.yaml"); text = p.read_text()
-          for key, name in services.items():
-              image = f"{registry}/{prefix}-{name}:{tag}"
-              pattern = re.compile(rf"(^{key}:\n(?:[ \t]+.*\n)*?[ \t]+image:[ \t]*).*$", re.M)
-              if pattern.search(text):
-                  text = pattern.sub(rf"\g<1>{image}", text)
-              else:
-                  text += f"\n{key}:\n  image: {image}\n"
-          p.write_text(text)
+          # one values file per demo cluster: chart/values-demo-cluster.yaml, chart/values-demo-cluster-2.yaml, ...
+          for p in sorted(pathlib.Path("chart").glob("values-demo-cluster*.yaml")):
+              text = p.read_text()
+              for key, name in services.items():
+                  image = f"{registry}/{prefix}-{name}:{tag}"
+                  pattern = re.compile(rf"(^{key}:\n(?:[ \t]+.*\n)*?[ \t]+image:[ \t]*).*$", re.M)
+                  if pattern.search(text):
+                      text = pattern.sub(rf"\g<1>{image}", text)
+                  else:
+                      text += f"\n{key}:\n  image: {image}\n"
+              p.write_text(text)
+              print("updated", p)
           PY
           git diff --stat
       - name: commit and push
@@ -99,5 +102,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git diff --quiet; then echo "nothing to promote"; exit 0; fi
-          git commit -am "ci: deploy images sha-${GITHUB_SHA::7} to the demo cluster"
+          git commit -am "ci: deploy images sha-${GITHUB_SHA::7} to the demo clusters"
           git push origin HEAD:main

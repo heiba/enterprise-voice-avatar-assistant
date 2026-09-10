@@ -7,6 +7,8 @@
 # Usage: SECRETS_FILE=~/secrets.env scripts/deploy-argocd.sh
 #   PROJECT=voice-avatar-assistant   project prepared by bootstrap-cluster.sh
 #   SECRETS_FILE=<path>              KEY=value file with the API keys (see secrets.env.example)
+#   VALUES_FILE=values-demo-cluster.yaml   values file in chart/ for this cluster
+#                                    (cluster 2: values-demo-cluster-2.yaml)
 #   REPO_URL=<git url>               fork to deploy from (default: the upstream repository)
 #   TARGET_REVISION=main             branch, tag or commit
 #   DOMAIN=<apps domain>             default: read from the cluster
@@ -18,6 +20,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT="${PROJECT:-voice-avatar-assistant}"
 REPO_URL="${REPO_URL:-https://github.com/rh-ai-quickstart/enterprise-voice-avatar-assistant.git}"
 TARGET_REVISION="${TARGET_REVISION:-main}"
+VALUES_FILE="${VALUES_FILE:-values-demo-cluster.yaml}"
 APP=voice-avatar-assistant
 LOG_FILE="${LOG_FILE:-$HOME/assistant-deploy-$(date +%Y%m%d-%H%M%S).log}"
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -48,6 +51,7 @@ command -v jq >/dev/null || { fail "jq is not installed (sudo dnf install -y jq)
 if user=$(oc whoami 2>/dev/null); then ok "logged in as $user"; else fail "not logged in"; exit 1; fi
 oc get namespace "$PROJECT" >/dev/null 2>&1 && ok "project $PROJECT exists" || { fail "project $PROJECT missing: run scripts/bootstrap-cluster.sh first"; exit 1; }
 oc get deployment openshift-gitops-server -n openshift-gitops >/dev/null 2>&1 && ok "Argo CD present" || { fail "Argo CD not found in openshift-gitops: run scripts/bootstrap-cluster.sh"; exit 1; }
+[ -f "$ROOT/chart/$VALUES_FILE" ] && ok "values file chart/$VALUES_FILE" || { fail "chart/$VALUES_FILE does not exist in this clone (VALUES_FILE)"; exit 1; }
 DOMAIN="${DOMAIN:-$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')}"
 [ -n "$DOMAIN" ] && ok "apps domain $DOMAIN" || { fail "could not read the apps domain; set DOMAIN="; exit 1; }
 if [ -n "${SECRETS_FILE:-}" ]; then [ -r "$SECRETS_FILE" ] && ok "secrets file $SECRETS_FILE" || { fail "SECRETS_FILE $SECRETS_FILE is not readable"; exit 1; }; else warn "no SECRETS_FILE: integrations stay off unless the secrets already exist"; fi
@@ -63,8 +67,8 @@ step "Argo CD application"
 run oc apply -f "$ROOT/deploy/argocd/appproject.yaml" >/dev/null
 oc patch appproject "$APP" -n openshift-gitops --type merge -p "{\"spec\":{\"sourceRepos\":[\"$REPO_URL\"],\"destinations\":[{\"server\":\"https://kubernetes.default.svc\",\"namespace\":\"$PROJECT\"}]}}" >/dev/null && ok "AppProject allows $REPO_URL -> $PROJECT"
 run oc apply -f "$ROOT/deploy/argocd/application.yaml" >/dev/null
-oc patch application "$APP" -n openshift-gitops --type merge -p "{\"spec\":{\"source\":{\"repoURL\":\"$REPO_URL\",\"targetRevision\":\"$TARGET_REVISION\",\"helm\":{\"parameters\":[{\"name\":\"global.domain\",\"value\":\"$DOMAIN\"}]}},\"destination\":{\"namespace\":\"$PROJECT\"}}}" >/dev/null \
-  && ok "Application $APP: $REPO_URL@$TARGET_REVISION, global.domain=$DOMAIN"
+oc patch application "$APP" -n openshift-gitops --type merge -p "{\"spec\":{\"source\":{\"repoURL\":\"$REPO_URL\",\"targetRevision\":\"$TARGET_REVISION\",\"helm\":{\"valueFiles\":[\"values.yaml\",\"$VALUES_FILE\"],\"parameters\":[{\"name\":\"global.domain\",\"value\":\"$DOMAIN\"}]}},\"destination\":{\"namespace\":\"$PROJECT\"}}}" >/dev/null \
+  && ok "Application $APP: $REPO_URL@$TARGET_REVISION, values $VALUES_FILE, global.domain=$DOMAIN"
 oc annotate application "$APP" -n openshift-gitops argocd.argoproj.io/refresh=normal --overwrite >/dev/null
 [ "${WAIT:-1}" = "1" ] || { echo "Application registered (WAIT=0)."; exit 0; }
 
@@ -113,7 +117,7 @@ done
 printf '  %-9s https://%s\n' "argocd" "$(oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}')"
 if [ "${RUN_TESTS:-0}" = "1" ]; then
   step "Connectivity test pod"
-  NS="$PROJECT" "$ROOT/scripts/test-services.sh" -f "$ROOT/chart/values-demo-cluster.yaml" --set global.domain="$DOMAIN" || FAILED=$((FAILED + 1))
+  NS="$PROJECT" "$ROOT/scripts/test-services.sh" -f "$ROOT/chart/$VALUES_FILE" --set global.domain="$DOMAIN" || FAILED=$((FAILED + 1))
 fi
 echo
 if [ "$FAILED" -gt 0 ]; then echo "Deployment finished with $FAILED problem(s); see the FAIL lines above and the log $LOG_FILE"; exit 1; fi

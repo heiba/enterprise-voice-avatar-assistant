@@ -66,7 +66,7 @@ echo https://$(oc get route/n8n -n ${PROJECT} --template='{{.spec.host}}')
 
 ## Deploying with Argo CD
 
-Scripted: `scripts/bootstrap-cluster.sh` (cluster admin, once) then `SECRETS_FILE=~/secrets.env scripts/deploy-argocd.sh`, see [SETUP.md](../SETUP.md). The steps below are what the scripts do.
+Scripted: `scripts/bootstrap-cluster.sh` (cluster admin, once) then `SECRETS_FILE=~/secrets.env VALUES_FILE=<values file in chart/> scripts/deploy-argocd.sh`, see [SETUP.md](../SETUP.md). Each demo cluster has its own values file (`chart/values-demo-cluster*.yaml`), all updated by CI with every image build. The steps below are what the scripts do.
 
 If the OpenShift GitOps operator is installed, Argo CD can own the deployment and keep it in sync with the `main` branch. It renders the same chart, so nothing differs from a manual install.
 

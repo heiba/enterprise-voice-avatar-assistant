@@ -274,15 +274,36 @@ LiveKit and the n8n encryption key are generated. Check that nothing is quoted o
 grep -v '^#' ~/secrets.env | grep -v '^$' | sed 's/=.*/=<set>/'
 ```
 
+### 5.6 Which values file: one per cluster
+
+Two demo clusters run side by side, and each has its own values file in the repository so
+they can differ (instance size, faces, voices) without affecting each other:
+
+| Cluster | Values file | Deploy with |
+|---|---|---|
+| Demo cluster 1 | `chart/values-demo-cluster.yaml` | `VALUES_FILE=values-demo-cluster.yaml` (the default) |
+| Demo cluster 2 | `chart/values-demo-cluster-2.yaml` | `VALUES_FILE=values-demo-cluster-2.yaml` |
+
+The files start identical. Neither contains anything cluster-specific: the apps domain is
+passed by the deploy script, and every key lives in `~/secrets.env` on that cluster's bastion.
+CI keeps both files up to date: every image build writes the new tags into every
+`chart/values-demo-cluster*.yaml`, so both clusters follow `main`. A third cluster is a
+third copy of the file, picked up by CI automatically. Keep a note of which cluster uses
+which file; the deploy script prints the file it registered, and
+`oc get application voice-avatar-assistant -n openshift-gitops -o jsonpath='{.spec.source.helm.valueFiles}'`
+shows it later.
+
 ## 6. Deploy with Argo CD
 
 One script creates the secrets from the file, registers the Argo CD application with the
-cluster's apps domain, and waits for the sync, the models and the pods. Its output goes to
-`~/assistant-deploy-<timestamp>.log` too. On the **bastion**:
+cluster's apps domain and values file, and waits for the sync, the models and the pods. Its
+output goes to `~/assistant-deploy-<timestamp>.log` too. On the **bastion** of cluster 1:
 
 ```bash
-cd ~/enterprise-voice-avatar-assistant && SECRETS_FILE=~/secrets.env RUN_TESTS=1 scripts/deploy-argocd.sh
+cd ~/enterprise-voice-avatar-assistant && SECRETS_FILE=~/secrets.env VALUES_FILE=values-demo-cluster.yaml RUN_TESTS=1 scripts/deploy-argocd.sh
 ```
+
+On the bastion of cluster 2, the same command with `VALUES_FILE=values-demo-cluster-2.yaml`.
 
 What happens:
 
@@ -290,7 +311,7 @@ What happens:
 |---|---|---|---|
 | 1 Checks | Login, project, Argo CD, apps domain, secrets file, TURN secret | `OK` lines; a `WARN` if the TURN secret is missing | seconds |
 | 2 Secrets | `scripts/create-secrets.sh` with the file; existing secrets are kept | `created assistant-…` six times, then `SLACK_BOT_TOKEN set` etc. | seconds |
-| 3 Application | Applies `deploy/argocd/`, sets the repository, branch and `global.domain` on the application | `Application voice-avatar-assistant: … global.domain=apps.…` | seconds |
+| 3 Application | Applies `deploy/argocd/`, sets the repository, branch, values file and `global.domain` on the application | `Application voice-avatar-assistant: … values values-demo-cluster.yaml, global.domain=apps.…` | seconds |
 | 4 Sync | Waits for `Synced/Healthy`, printing unhealthy resources every minute | `application Synced/Healthy` | 5 to 20 min |
 | 5 Models | Waits for the three InferenceServices; the first start downloads about 10 GB of weights | `all InferenceServices Ready` | 10 to 20 min |
 | 6 Pods | Waits for every pod | `all pods Running or Completed` | with the above |
@@ -349,6 +370,8 @@ Full pre-demo check, the same one used before every demo:
 cd ~/enterprise-voice-avatar-assistant && NS=voice-avatar-assistant scripts/demo-preflight.sh -f chart/values-demo-cluster.yaml --set global.domain=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
 ```
 
+On cluster 2, use `-f chart/values-demo-cluster-2.yaml`.
+
 Then walk through [docs/demo-script.md](docs/demo-script.md) once from the **laptop**: a
 cited text answer, a voice session with the avatar (the browser asks for the microphone),
 a request by voice with its approval card in Slack, and the archive button producing a
@@ -357,8 +380,9 @@ Google Doc.
 ## 9. Day-two changes
 
 - **Application updates.** Every push to `main` that touches the services builds images and
-  commits their tags into `chart/values-demo-cluster.yaml`; Argo CD syncs within minutes.
-  `oc get application voice-avatar-assistant -n openshift-gitops` shows the state.
+  commits their tags into every `chart/values-demo-cluster*.yaml`; Argo CD on both clusters
+  syncs within minutes. `oc get application voice-avatar-assistant -n openshift-gitops`
+  shows the state.
 - **A changed key.** Edit `~/secrets.env`, rewrite only that secret, and restart the pods that
   read it:
 
@@ -368,8 +392,9 @@ Google Doc.
 
   Never use `FORCE=1` on a running cluster: it regenerates the database and n8n passwords.
 - **Chart values** (faces, voices, model sizes). Argo CD deploys what is in git, so the
-  change is a commit to `chart/values-demo-cluster.yaml` on `main`, or on a fork: run the
-  deploy script again with `REPO_URL=<fork url>` and it re-points the application.
+  change is a commit to that cluster's values file on `main` (`values-demo-cluster.yaml` or
+  `values-demo-cluster-2.yaml`), or on a fork: run the deploy script again with
+  `REPO_URL=<fork url>` and it re-points the application.
 - **Workflows.** After editing `chart/files/n8n-workflows/`, re-import on the bastion with
   `N8N_URL=https://<n8n host> N8N_API_KEY=… scripts/import-workflows.sh`; credentials attached
   in the editor survive the re-import.
@@ -383,7 +408,7 @@ After the environment is destroyed and a new one provisioned:
 2. **Laptop:** the apps domain changed, so update the two URLs that contain it: the Slack
    app's request URL under **Interactivity & Shortcuts**, and the Google OAuth client's
    redirect URI under **Credentials**. Tokens, keys and the Drive folder stay valid.
-3. **Bastion:** section 6 (deploy), section 8 (documents).
+3. **Bastion:** section 6 (deploy, with the `VALUES_FILE` of that cluster), section 8 (documents).
 4. **Laptop:** section 7 (n8n owner account, Google credential, publish WF5).
 
 About 90 minutes, most of it the model download.

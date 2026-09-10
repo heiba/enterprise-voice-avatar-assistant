@@ -148,7 +148,9 @@ def chat_stream(request: ChatRequest):
             if kind == "delta":
                 yield json.dumps({"type": "delta", "text": payload}) + "\n"
             else:
-                yield json.dumps({"type": "final", **payload.model_dump()}) + "\n"
+                # mode="json": the final carries the ticket when the message was a request, and
+                # its timestamps are datetimes that json.dumps cannot serialise otherwise
+                yield json.dumps({"type": "final", **payload.model_dump(mode="json")}) + "\n"
 
     return StreamingResponse(lines(), media_type="application/x-ndjson")
 

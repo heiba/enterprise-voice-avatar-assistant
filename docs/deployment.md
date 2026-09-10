@@ -1,6 +1,6 @@
 # Deployment guide
 
-For a complete walk-through on a freshly provisioned cluster, including the platform prerequisites, GPU sharing, creating every key and the Argo CD path, run `scripts/setup.sh` on the bastion host as described in the README's [Setup](../README.md#setup) section. This guide documents the individual steps and options.
+For a complete walk-through on a freshly provisioned cluster, including the platform prerequisites, GPU sharing, creating every key and the Argo CD path, run `scripts/setup.sh` on the bastion host as described in the README's [Setup](../README.md#setup) section; [SETUP.md](SETUP.md) is the reference for that script. This guide documents the individual steps and options.
 
 The [README](../README.md) shows the one-command install. This page has the manual Helm steps behind it, the remote-model and Argo CD variants, the optional third-party accounts, and how to handle the generated secrets. Every chart value is documented in [../chart/README.md](../chart/README.md).
 

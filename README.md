@@ -2,7 +2,7 @@
 
 Ground a voice-enabled, avatar-fronted assistant in your company documents with RAG, n8n workflows, and models served on Red Hat® OpenShift® AI.
 
-> **Status: complete.** Everything described here is deployed and demonstrated; [docs/deployment.md](docs/deployment.md) has the installation detail and [docs/development.md](docs/development.md) the layout of the repository.
+> **Status: complete.** Everything described here is deployed and demonstrated; [docs/SETUP.md](docs/SETUP.md) is the reference for the setup script, [docs/deployment.md](docs/deployment.md) has the installation detail and [docs/development.md](docs/development.md) the layout of the repository.
 
 ## Table of Contents
 
@@ -268,11 +268,12 @@ the images are public on Quay and Argo CD reads this public repository.
 
    It logs in if the bastion is not, prints the state of the cluster and of every step, then
    runs the remaining steps one after the other. It stops only where it needs something from
-   you (the keys in step 5, the browser work in step 7) or when a step fails, with the reason
-   and the commands that show more; run it again and it resumes at that step.
-   `scripts/setup.sh --status` only shows the state, `scripts/setup.sh --step N` runs one step
-   again, `scripts/setup.sh --yes` skips the optional prompts. Progress and discovered facts are
-   in `~/.assistant-setup/state.env`, logs of each step in `~/.assistant-setup/logs/`.
+   you (the keys in step 5) or when a step fails, with the reason and the commands that show
+   more; run it again and it resumes at that step. `scripts/setup.sh --status` only shows the
+   state, `scripts/setup.sh --step N` runs one step again, `scripts/setup.sh --yes` skips the
+   optional prompts. Progress and discovered facts are in `~/.assistant-setup/state.env`, logs
+   of each step in `~/.assistant-setup/logs/`. The options, the files, what every step checks
+   and changes, and what to do when one stops are in [docs/SETUP.md](docs/SETUP.md).
 
 ### What the steps do
 
@@ -311,16 +312,17 @@ it holds no domain, no endpoint and no key.
   integrations secret, passwords are kept) and `oc rollout restart deployment/n8n deployment/rag-api deployment/voice-agent -n voice-avatar-assistant`.
 - **Chart values** (faces, voices, model shares) are commits to `chart/values-demo-cluster.yaml`;
   `scripts/deploy-argocd.sh` accepts `REPO_URL` and `TARGET_REVISION` for a fork or a branch.
-- **Workflows.** After editing `chart/files/n8n-workflows/`, re-import with
-  `N8N_URL=<n8n url> N8N_API_KEY=… scripts/import-workflows.sh`; credentials attached in the
-  editor survive.
+- **Workflows.** A commit that changes `chart/files/n8n-workflows/` restarts n8n at the next
+  sync, which re-imports and re-publishes the workflows; edits made in the n8n editor are
+  overwritten by that, so make them in the files.
 - **Next cluster.** Clone, `scripts/setup.sh`, and update the one external URL that contains the
   cluster domain: the Slack app's request URL under Interactivity & Shortcuts. Tokens, the
   service account key and the Drive folder stay valid.
 
 When something fails, the step prints a `debug:` line with the commands that show why, the
-logs are in `~/.assistant-setup/logs/`, and [docs/troubleshooting.md](docs/troubleshooting.md)
-lists the symptoms seen while building the quickstart with the fix for each.
+logs are in `~/.assistant-setup/logs/`, [docs/SETUP.md](docs/SETUP.md#when-a-step-stops)
+has the symptoms seen per step, and [docs/troubleshooting.md](docs/troubleshooting.md) lists
+the rest by area.
 
 ### Prerequisites
 

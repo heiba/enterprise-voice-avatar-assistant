@@ -72,7 +72,7 @@ Application images built from this repository and published by CI as <registry>/
 
 ### `secrets`
 
-Names of the pre-created Secrets. Keys per secret: postgres:     POSTGRESQL_USER, POSTGRESQL_PASSWORD, POSTGRESQL_DATABASE, DATABASE_URL minio:        MINIO_ROOT_USER, MINIO_ROOT_PASSWORD n8n:          N8N_ENCRYPTION_KEY livekit:      LIVEKIT_API_KEY, LIVEKIT_API_SECRET models:       LLM_API_KEY, STT_API_KEY, TTS_API_KEY, EMBEDDINGS_API_KEY, GUARDRAILS_API_KEY, HF_TOKEN integrations: SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, SIMLI_API_KEY, SIMLI_FACE_ID, TAVUS_API_KEY, TAVUS_FACE_ID, TAVUS_PAL_ID (optional), ELEVENLABS_API_KEY, GOOGLE_SERVICE_ACCOUNT_JSON
+Names of the pre-created Secrets. Keys per secret: postgres:     POSTGRESQL_USER, POSTGRESQL_PASSWORD, POSTGRESQL_DATABASE, DATABASE_URL minio:        MINIO_ROOT_USER, MINIO_ROOT_PASSWORD n8n:          N8N_ENCRYPTION_KEY livekit:      LIVEKIT_API_KEY, LIVEKIT_API_SECRET models:       LLM_API_KEY, STT_API_KEY, TTS_API_KEY, EMBEDDINGS_API_KEY, GUARDRAILS_API_KEY, HF_TOKEN integrations: SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, SIMLI_API_KEY, SIMLI_FACE_ID, TAVUS_API_KEY, TAVUS_FACE_ID, TAVUS_PAL_ID (optional), GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DOCS_FOLDER_ID
 
 | Key | Default | Description |
 |---|---|---|
@@ -227,7 +227,7 @@ Models. Each model has a `deploy` toggle: true creates a vLLM ServingRuntime and
 | `models.guardrails.resources.limits.memory` | `24Gi` | Memory limit. |
 | `models.guardrails.resources.limits.nvidia.com/gpu` | `"1"` | GPU limit (per model pod). |
 | `models.guardrails.endpoint` | `""` | OpenAI-compatible base URL including /v1, used when `deploy` is false. |
-| `models.tts.deploy` | `true` | Kokoro exposes the OpenAI speech API on CPU. Set deploy=false and endpoint to use another OpenAI-compatible TTS service (or ElevenLabs via the voice agent). |
+| `models.tts.deploy` | `true` | Kokoro exposes the OpenAI speech API on CPU. Set deploy=false and endpoint to use another OpenAI-compatible TTS service. |
 | `models.tts.image` | `ghcr.io/remsky/kokoro-fastapi-cpu:v0.8.2` | Container image (full reference). |
 | `models.tts.servedModelName` | `kokoro` | Model name clients send in requests. |
 | `models.tts.voice` | `af_heart` | Kokoro voice (af_*/bf_* female, am_*/bm_* male). |

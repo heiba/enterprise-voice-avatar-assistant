@@ -33,7 +33,7 @@ images:
 #   models:       LLM_API_KEY, STT_API_KEY, TTS_API_KEY, EMBEDDINGS_API_KEY, GUARDRAILS_API_KEY, HF_TOKEN
 #   integrations: SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, SIMLI_API_KEY, SIMLI_FACE_ID,
 #                 TAVUS_API_KEY, TAVUS_FACE_ID, TAVUS_PAL_ID (optional),
-#                 ELEVENLABS_API_KEY, GOOGLE_SERVICE_ACCOUNT_JSON
+#                 GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DOCS_FOLDER_ID
 secrets:
   postgres: assistant-postgres
   minio: assistant-minio
@@ -264,7 +264,7 @@ models:
 
   tts:
     # Kokoro exposes the OpenAI speech API on CPU. Set deploy=false and endpoint
-    # to use another OpenAI-compatible TTS service (or ElevenLabs via the voice agent).
+    # to use another OpenAI-compatible TTS service.
     deploy: true
     image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.8.2
     servedModelName: kokoro

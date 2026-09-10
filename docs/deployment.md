@@ -98,8 +98,6 @@ Everything below is optional; the assistant runs without any of it. Keys go into
 
 **Google Docs (transcript archival).** In [Google Cloud console](https://console.cloud.google.com) create a project, enable the *Google Docs API* and *Google Drive API*, configure the OAuth consent screen as *External* and add yourself as a test user, then create an *OAuth client ID* of type *Web application* whose authorized redirect URI is `https://<n8n host>/rest/oauth2-credential/callback`. In n8n add a *Google Docs OAuth2 API* credential with the client ID and secret and sign in. Create a Drive folder for transcripts and set its ID (the part of the URL after `/folders/`) in values as `n8n.extraEnv.GOOGLE_DOCS_FOLDER_ID`. While the consent screen stays in *Testing*, Google expires the sign-in after seven days; publishing the app removes that limit.
 
-**ElevenLabs (cloud text-to-speech, instead of Kokoro).** Create an API key at [elevenlabs.io](https://elevenlabs.io) and put it in the secret as `ELEVENLABS_API_KEY`; choose a voice ID from their voice library and set `voiceAgent.extraEnv.TTS_PROVIDER: elevenlabs` and `voiceAgent.extraEnv.ELEVENLABS_VOICE_ID: <id>`.
-
 **Simli and Hedra (alternative avatar providers).** Same pattern as Tavus with `SIMLI_API_KEY` and `SIMLI_FACE_ID`, or `HEDRA_API_KEY` and `HEDRA_AVATAR_IMAGE`, and the matching `voiceAgent.avatarProvider`.
 
 ## Working with the generated secrets
@@ -114,7 +112,7 @@ Everything below is optional; the assistant runs without any of it. Keys go into
 | `assistant-qdrant` | `QDRANT_API_KEY` |
 | `assistant-livekit` | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` |
 | `assistant-models` | `LLM_API_KEY`, `STT_API_KEY`, `TTS_API_KEY`, `EMBEDDINGS_API_KEY`, `GUARDRAILS_API_KEY`, `HF_TOKEN` |
-| `assistant-integrations` | `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `TAVUS_API_KEY`, `TAVUS_FACE_ID`, `TAVUS_PAL_ID`, `SIMLI_API_KEY`, `SIMLI_FACE_ID`, `ELEVENLABS_API_KEY`, `GOOGLE_SERVICE_ACCOUNT_JSON` |
+| `assistant-integrations` | `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `TAVUS_API_KEY`, `TAVUS_FACE_ID`, `TAVUS_PAL_ID`, `SIMLI_API_KEY`, `SIMLI_FACE_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_DOCS_FOLDER_ID` |
 
 Read a value, for example the MinIO console login:
 

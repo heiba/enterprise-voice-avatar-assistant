@@ -43,15 +43,6 @@ def build_stt():
 
 def build_tts(face: faces.Face | None = None):
     """TTS for this session; the voice follows the chosen avatar face (see app/faces.py)."""
-    if settings.tts_provider.lower() == "elevenlabs":
-        from livekit.plugins import elevenlabs
-
-        return elevenlabs.TTS(
-            # only a voice pinned on the face applies here: gender defaults are Kokoro names
-            voice_id=(face.voice if face and face.voice else settings.elevenlabs_voice_id),
-            model=settings.elevenlabs_model,
-            api_key=settings.elevenlabs_api_key,
-        )
     client = openai_sdk.AsyncClient(
         base_url=settings.tts_base_url,
         api_key=settings.tts_api_key or "none",

@@ -16,7 +16,7 @@
 #     RUN_TESTS=1            run `helm test` at the end
 #   Extra arguments go to helm, for example: scripts/deploy.sh -f my-values.yaml
 #
-# Secrets for the optional integrations (Slack, Tavus, Google, ElevenLabs) are read by
+# Secrets for the optional integrations (Slack, Tavus, Google) are read by
 # scripts/create-secrets.sh from the environment; see its header.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

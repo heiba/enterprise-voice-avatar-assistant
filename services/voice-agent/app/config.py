@@ -31,8 +31,7 @@ class Settings(BaseSettings):
     stt_api_key: str = "none"
     stt_language: str = "en"
 
-    # Text to speech: openai (any OpenAI-compatible speech endpoint, Kokoro in the chart) or elevenlabs
-    tts_provider: str = "openai"
+    # Text to speech: any OpenAI-compatible speech endpoint (Kokoro in the chart)
     tts_base_url: str = "http://tts:8880/v1"
     tts_model: str = "kokoro"
     tts_voice: str = "af_heart"
@@ -41,9 +40,6 @@ class Settings(BaseSettings):
     tts_voice_male: str = "am_michael"
     tts_api_key: str = "none"
     tts_speed: float = 1.0
-    elevenlabs_api_key: str | None = None
-    elevenlabs_voice_id: str | None = None
-    elevenlabs_model: str = "eleven_turbo_v2_5"
 
     # Direct LLM, used only if the RAG API is unavailable
     llm_base_url: str = "http://localhost:8080/v1"

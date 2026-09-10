@@ -94,7 +94,6 @@ flowchart LR
   end
   subgraph External["External integrations (optional)"]
     AV[Avatar provider<br/>Tavus / Simli / Hedra]
-    EL[ElevenLabs TTS]
     SL[Slack]
     GD[Google Docs]
   end
@@ -167,7 +166,7 @@ Models served on OpenShift AI, only if you deploy them with the chart instead of
 - Client tools: `oc` 4.16 or later and `helm` 3.14 or later
 - Optional: the OpenShift GitOps operator (Argo CD) for the GitOps deployment path
 - Optional: the TrustyAI component of OpenShift AI, only for the `trustyai` guardrails provider. The default provider, Granite Guardian on vLLM, does not need it
-- Optional external services: a Slack workspace with a bot token, a Google Cloud project with the Docs and Drive APIs enabled, an avatar provider account (Tavus, Simli, or Hedra), and ElevenLabs. See [Third-party accounts and keys](#third-party-accounts-and-keys)
+- Optional external services: a Slack workspace with a bot token, a Google Cloud project with the Docs and Drive APIs enabled, and an avatar provider account (Tavus, Simli, or Hedra). See [Third-party accounts and keys](#third-party-accounts-and-keys)
 
 Tested with (September 2026, single node with 4x NVIDIA L4):
 
@@ -206,7 +205,7 @@ Cluster administrators who start from a bare cluster can install the platform pr
 
 ### Third-party accounts and keys
 
-All optional: Tavus (or Simli, Hedra) for avatar video, Slack for notifications and approvals, Google Docs for transcript archival, ElevenLabs for cloud text-to-speech. Where to get each key, where it goes, and the free-tier caveats are in [docs/deployment.md](docs/deployment.md#third-party-accounts-and-keys).
+All optional: Tavus (or Simli, Hedra) for avatar video, Slack for notifications and approvals, Google Docs for transcript archival. Where to get each key, where it goes, and the free-tier caveats are in [docs/deployment.md](docs/deployment.md#third-party-accounts-and-keys).
 
 ## Deploy
 
@@ -331,7 +330,7 @@ Before deploying, ensure you have:
 - `helm` installed
 - Run `scripts/check-prereqs.sh` after logging in; it reports anything missing and which permissions you lack
 - Model endpoints ready: either existing OpenAI-compatible endpoints (MaaS) with API keys, or GPU capacity to deploy models with the chart
-- Optional: a Slack bot token, a Google Cloud OAuth client for Google Docs, an avatar provider key (Tavus, Simli or Hedra), and an ElevenLabs key; see [Third-party accounts and keys](#third-party-accounts-and-keys)
+- Optional: a Slack bot token, a Google Cloud OAuth client for Google Docs, and an avatar provider key (Tavus, Simli or Hedra); see [Third-party accounts and keys](#third-party-accounts-and-keys)
 
 ### Installation
 

@@ -1,5 +1,5 @@
 # cert-manager Operator for Red Hat OpenShift. Required by OpenShift AI 3.x for KServe,
-# and used by scripts/setup-turn-tls.sh to issue the TURN certificate when the cluster
+# and used by scripts/setup.sh (step 4) to issue the TURN certificate when the cluster
 # has no trusted wildcard certificate.
 apiVersion: v1
 kind: Namespace

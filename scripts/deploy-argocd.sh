@@ -61,7 +61,7 @@ if [ -n "${VALUES_OBJECT_FILE:-}" ]; then VALUES_OBJECT=$(jq -c . "$VALUES_OBJEC
 DOMAIN="${DOMAIN:-$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')}"
 [ -n "$DOMAIN" ] && ok "apps domain $DOMAIN" || { fail "could not read the apps domain; set DOMAIN="; exit 1; }
 if [ -n "${SECRETS_FILE:-}" ]; then [ -r "$SECRETS_FILE" ] && ok "secrets file $SECRETS_FILE" || { fail "SECRETS_FILE $SECRETS_FILE is not readable"; exit 1; }; else warn "no SECRETS_FILE: integrations stay off unless the secrets already exist"; fi
-if oc get secret livekit-turn-tls -n "$PROJECT" >/dev/null 2>&1; then ok "TURN certificate secret livekit-turn-tls present"; else warn "livekit-turn-tls missing: voice through corporate networks needs it (scripts/setup-turn-tls.sh); LiveKit waits for it"; fi
+if oc get secret livekit-turn-tls -n "$PROJECT" >/dev/null 2>&1; then ok "TURN certificate secret livekit-turn-tls present"; else warn "livekit-turn-tls missing: voice through corporate networks needs it (scripts/setup.sh step 4); LiveKit waits for it"; fi
 
 step "Language model ($LLM_NAME)"
 if [ -z "${LLM_ENDPOINT:-}" ]; then

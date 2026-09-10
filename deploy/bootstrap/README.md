@@ -18,7 +18,7 @@ each operator, configures GPU time-slicing (`instances/gpu-time-slicing.yaml`, r
 count from `GPU_SLICES`), makes sure KServe is Managed, lowers the GPU memory share of the
 pre-deployed language model (`LLM_NAME`, `LLM_GPU_FRACTION`), and creates the project; `scripts/setup.sh`
 in the repository root drives it (README, Setup). `operators/cert-manager.yaml` is required by OpenShift AI 3.x
-and used by `scripts/setup-turn-tls.sh`.
+and used by `scripts/setup.sh` (step 4) to issue the TURN certificate when the cluster has no trusted wildcard.
 
 ## Apply in two phases
 

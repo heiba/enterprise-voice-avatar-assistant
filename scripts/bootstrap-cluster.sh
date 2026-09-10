@@ -41,7 +41,10 @@ wait_for() {
   done
   return 0
 }
-csv_phase() { oc get csv -A -o json 2>/dev/null | jq -r --arg n "$1" '.items[] | select(.metadata.name | startswith($n)) | "\(.status.phase) \(.spec.version)"' | head -1; }
+# CSVs are looked up in the operator's namespace (and openshift-operators); a cluster-wide
+# listing returns every copied CSV of every namespace and takes minutes on a busy cluster
+csv_ns() { case "$1" in nfd) echo openshift-nfd;; gpu-operator-certified) echo nvidia-gpu-operator;; cert-manager-operator) echo cert-manager-operator;; openshift-gitops-operator) echo openshift-gitops-operator;; rhods-operator) echo redhat-ods-operator;; *) echo openshift-operators;; esac; }
+csv_phase() { local ns; for ns in "$(csv_ns "$1")" openshift-operators; do oc get csv -n "$ns" -o json 2>/dev/null | jq -r --arg n "$1" '.items[] | select(.metadata.name | startswith($n)) | "\(.status.phase) \(.spec.version)"' | head -1 | grep . && return 0; done; return 1; }
 csv_succeeded() { [ "$(csv_phase "$1" | cut -d' ' -f1)" = "Succeeded" ]; }
 require_tool() { command -v "$1" >/dev/null || { fail "$1 is not installed on this host ($2)"; exit 1; }; }
 
@@ -188,4 +191,4 @@ step "Summary"
 NAMESPACE="$PROJECT" "$ROOT/scripts/check-prereqs.sh" || FAILED=$((FAILED + 1))
 echo
 if [ "$FAILED" -gt 0 ]; then echo "Bootstrap finished with $FAILED problem(s); see the FAIL lines above and the log $LOG_FILE"; exit 1; fi
-echo "Bootstrap complete. Next: scripts/setup-turn-tls.sh, then scripts/deploy-argocd.sh, or simply scripts/setup.sh."
+echo "Bootstrap complete. Next: scripts/setup.sh continues with the TURN certificate and the deployment."

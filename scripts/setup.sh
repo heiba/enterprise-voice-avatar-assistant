@@ -98,6 +98,8 @@ discover() {
   PROJECT_EXISTS=no; ARGO_READY=no; TURN_SECRET=no; SECRETS_IN_CLUSTER=no; APP_STATE=""; ISVC_TOTAL=0; ISVC_READY=0; PODS_NOT_READY=1; FRONTEND_URL=""; N8N_URL=""; DOCS_INDEXED=""
   LOGGED_IN=0; command -v oc >/dev/null && oc whoami >/dev/null 2>&1 && LOGGED_IN=1
   [ "$LOGGED_IN" = 1 ] || return
+  progress() { [ "${QUIET_DISCOVERY:-0}" = 1 ] || printf '  %s..%s %s\n' "$D" "$N" "$1"; }
+  progress "cluster and nodes"
   API=$(oc whoami --show-server); USER_NAME=$(oc whoami)
   OCP_VERSION=$(oc get clusterversion version -o jsonpath='{.status.desired.version}' 2>/dev/null)
   DOMAIN=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}' 2>/dev/null)
@@ -109,18 +111,29 @@ discover() {
   GPU_MEMORY=$(oc get nodes -o jsonpath='{.items[0].metadata.labels.nvidia\.com/gpu\.memory}' 2>/dev/null)
   GPU_REPLICAS=$(oc get nodes -o jsonpath='{.items[0].metadata.labels.nvidia\.com/gpu\.replicas}' 2>/dev/null)
   GPU_ALLOC=$(oc get nodes -o json 2>/dev/null | jq '[.items[].status.allocatable["nvidia.com/gpu"] // "0" | tonumber] | add')
-  RHOAI_VERSION=$(oc get csv -A -o json 2>/dev/null | jq -r '.items[] | select(.metadata.name | startswith("rhods-operator")) | .spec.version' | head -1)
+  progress "operators"
+  # CSVs are looked up in the operator's own namespace (and openshift-operators): a cluster-wide
+  # listing returns every copied CSV of every namespace and takes minutes on a busy cluster
+  csv_version() {  # <prefix> <namespace...>: version of the first Succeeded CSV found
+    local n=$1; shift; local ns
+    for ns in "$@"; do oc get csv -n "$ns" -o json 2>/dev/null | jq -r --arg n "$n" '.items[] | select(.metadata.name | startswith($n)) | select(.status.phase=="Succeeded") | .spec.version' | head -1 | grep . && return 0; done
+    return 1
+  }
+  RHOAI_VERSION=$(csv_version rhods-operator redhat-ods-operator openshift-operators || true)
   DSC=$(oc get datasciencecluster -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
   KSERVE=$(oc get datasciencecluster "$DSC" -o jsonpath='{.spec.components.kserve.managementState}' 2>/dev/null)
-  csv_ok() { oc get csv -A -o json 2>/dev/null | jq -e --arg n "$1" '.items[] | select(.metadata.name | startswith($n)) | select(.status.phase=="Succeeded")' >/dev/null; }
-  OP_NFD=$(csv_ok nfd && echo yes || echo no); OP_GPU=$(csv_ok gpu-operator-certified && echo yes || echo no)
-  OP_CM=$(csv_ok cert-manager-operator && echo yes || echo no); OP_GITOPS=$(csv_ok openshift-gitops-operator && echo yes || echo no)
+  OP_NFD=$(csv_version nfd openshift-nfd openshift-operators >/dev/null && echo yes || echo no)
+  OP_GPU=$(csv_version gpu-operator-certified nvidia-gpu-operator openshift-operators >/dev/null && echo yes || echo no)
+  OP_CM=$(csv_version cert-manager-operator cert-manager-operator openshift-operators >/dev/null && echo yes || echo no)
+  OP_GITOPS=$(csv_version openshift-gitops-operator openshift-gitops-operator openshift-operators >/dev/null && echo yes || echo no)
+  progress "language model"
   LLM_NS=$(oc get isvc -A -o json 2>/dev/null | jq -r --arg n "$LLM_NAME" '.items[] | select(.metadata.name==$n) | .metadata.namespace' | head -1)
   LLM_READY=""; LLM_SHARE=""
   if [ -n "$LLM_NS" ]; then
     LLM_READY=$(oc get isvc "$LLM_NAME" -n "$LLM_NS" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
     LLM_SHARE=$(oc get isvc "$LLM_NAME" -n "$LLM_NS" -o json 2>/dev/null | jq -r '.spec.predictor.model.args // [] | .[] | select(startswith("--gpu-memory-utilization")) | sub("^--gpu-memory-utilization=?";"")' | head -1)
   fi
+  progress "project and application"
   PROJECT_EXISTS=$(oc get namespace "$PROJECT" >/dev/null 2>&1 && echo yes || echo no)
   ARGO_READY=$([ "$(oc get deployment openshift-gitops-server -n openshift-gitops -o jsonpath='{.status.readyReplicas}' 2>/dev/null)" = "1" ] && echo yes || echo no)
   TURN_SECRET=$(oc get secret livekit-turn-tls -n "$PROJECT" >/dev/null 2>&1 && echo yes || echo no)
@@ -246,13 +259,62 @@ step3() {
 step4() {
   say "${B}Step 4: TURN certificate${N} (voice through corporate networks needs TURN over TLS with a trusted certificate)"
   [ "$PROJECT_EXISTS" = yes ] || { bad "project missing; run step 3 first"; return 1; }
-  say "  \$ scripts/setup-turn-tls.sh copy"
-  if PROJECT="$PROJECT" "$ROOT/scripts/setup-turn-tls.sh" copy; then mark 4; return 0; fi
-  warn "the cluster's wildcard certificate cannot be used; cert-manager can request one from Let's Encrypt (the apps domain must be reachable from the internet)"
+  local host="livekit-turn-${PROJECT}.${DOMAIN}" secret=livekit-turn-tls
+  local name; name=$(oc get ingresscontroller default -n openshift-ingress-operator -o jsonpath='{.spec.defaultCertificate.name}' 2>/dev/null); name="${name:-router-certs-default}"
+  local tmp; tmp=$(mktemp -d)
+  say "  \$ oc get secret $name -n openshift-ingress   (the cluster's wildcard certificate)"
+  if oc get secret "$name" -n openshift-ingress -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 -d > "$tmp/tls.crt" && [ -s "$tmp/tls.crt" ] \
+     && oc get secret "$name" -n openshift-ingress -o jsonpath='{.data.tls\.key}' | base64 -d > "$tmp/tls.key" \
+     && openssl x509 -in "$tmp/tls.crt" -noout -ext subjectAltName 2>/dev/null | grep -q "\*\.${DOMAIN}" \
+     && openssl verify -untrusted "$tmp/tls.crt" "$tmp/tls.crt" >/dev/null 2>&1; then
+    note "$(openssl x509 -in "$tmp/tls.crt" -noout -issuer -enddate | tr '\n' ' ')"
+    oc create secret tls "$secret" -n "$PROJECT" --cert="$tmp/tls.crt" --key="$tmp/tls.key" --dry-run=client -o yaml | oc apply -f - >/dev/null \
+      && ok "secret $PROJECT/$secret created from the trusted wildcard certificate for $host"
+    rm -rf "$tmp"; mark 4; return 0
+  fi
+  rm -rf "$tmp"
+  warn "the wildcard certificate is self-signed or does not cover *.$DOMAIN; cert-manager can request one from Let's Encrypt (the apps domain must be reachable from the internet)"
   [ "$YES" = 1 ] || ask ACME_EMAIL "E-mail for Let's Encrypt (empty to skip TURN for now)" "${ACME_EMAIL:-}"
-  [ -n "$ACME_EMAIL" ] || { warn "TURN skipped; voice works on open networks only. Rerun: scripts/setup.sh --step 4"; return 0; }
+  [ -n "${ACME_EMAIL:-}" ] || { warn "TURN skipped: voice works on open networks only. Rerun later: scripts/setup.sh --step 4"; mark 4; return 0; }
   save ACME_EMAIL "$ACME_EMAIL"
-  PROJECT="$PROJECT" ACME_EMAIL="$ACME_EMAIL" "$ROOT/scripts/setup-turn-tls.sh" cert-manager && mark 4
+  oc get crd clusterissuers.cert-manager.io >/dev/null 2>&1 || { bad "cert-manager is not installed (step 3 installs it)"; return 1; }
+  oc apply -f - <<YAML >/dev/null
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-http01
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ${ACME_EMAIL}
+    privateKeySecretRef:
+      name: letsencrypt-http01-account
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: openshift-default
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ${secret}
+  namespace: ${PROJECT}
+spec:
+  secretName: ${secret}
+  dnsNames:
+    - ${host}
+  issuerRef:
+    name: letsencrypt-http01
+    kind: ClusterIssuer
+YAML
+  ok "ClusterIssuer letsencrypt-http01 and Certificate $PROJECT/$secret applied; waiting for the ACME challenge"
+  cert_ready() { [ "$(oc get certificate "$secret" -n "$PROJECT" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)" = "True" ]; }
+  local waited=0
+  until cert_ready; do
+    [ "$waited" -ge 600 ] && { bad "certificate not Ready after 10 min; oc describe certificate $secret -n $PROJECT; oc get order,challenge -n $PROJECT"; return 1; }
+    sleep 15; waited=$((waited + 15)); [ $((waited % 60)) -eq 0 ] && note "waiting for the ACME challenge (${waited}s)"
+  done
+  ok "certificate Ready for $host (renews itself)"; mark 4
 }
 step5() {
   say "${B}Step 5: keys and integrations${N} (one file: $SECRETS_FILE)"
@@ -363,6 +425,6 @@ while :; do
   [ -n "$NEXT" ] || { say "  ${G}Every step is done.${N} scripts/setup.sh --step N runs one again."; exit 0; }
   run_step "$NEXT"; rc=$?
   say "$(ts) refreshing the cluster state"
-  discover; show_status
+  QUIET_DISCOVERY=1 discover; show_status
   [ "$rc" = 0 ] || { say "  ${R}Stopped at step $NEXT${N}: fix what is reported above, then run scripts/setup.sh again (it resumes there)."; exit 1; }
 done

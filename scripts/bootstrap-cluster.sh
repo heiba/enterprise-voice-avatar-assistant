@@ -186,8 +186,15 @@ else
   if [ "$GPU_SLICES" -gt 1 ] && [ "$(printf '%s\n' "${current:-0.9}" "$LLM_GPU_FRACTION" | sort -g | tail -1)" != "$LLM_GPU_FRACTION" ]; then
     info "lowering the model's GPU memory share to $LLM_GPU_FRACTION so Whisper and BGE-M3 fit next to it"
     newargs=$(printf '%s' "$args" | jq -c --arg f "--gpu-memory-utilization=$LLM_GPU_FRACTION" '[.[] | select(startswith("--gpu-memory-utilization") | not)] + [$f]')
-    run oc patch isvc "$LLM_NAME" -n "$llm_ns" --type merge -p "{\"spec\":{\"predictor\":{\"model\":{\"args\":$newargs}}}}" >/dev/null
-    llm_ready() { [ "$(oc get isvc "$LLM_NAME" -n "$llm_ns" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')" = "True" ] && [ "$(oc get pods -n "$llm_ns" -l "serving.kserve.io/inferenceservice=$LLM_NAME" --no-headers | grep -c Running)" = "1" ]; }
+    # Recreate, not a rolling update: on a shared GPU the old pod must release the card before
+    # the new one can start, and a rolling update keeps the old pod until the new one is Ready
+    run oc patch isvc "$LLM_NAME" -n "$llm_ns" --type merge -p "{\"spec\":{\"predictor\":{\"deploymentStrategy\":{\"type\":\"Recreate\"},\"model\":{\"args\":$newargs}}}}" >/dev/null
+    # ready = the only predictor pod runs with the new share and reports Ready
+    llm_ready() {
+      local pods; pods=$(oc get pods -n "$llm_ns" -l "serving.kserve.io/inferenceservice=$LLM_NAME" -o json 2>/dev/null)
+      [ "$(printf '%s' "$pods" | jq '.items | length')" = "1" ] || return 1
+      printf '%s' "$pods" | jq -e --arg f "--gpu-memory-utilization=$LLM_GPU_FRACTION" '.items[0] | (.spec.containers[] | select(.name=="kserve-container") | .args | index($f) != null) and ([.status.conditions[] | select(.type=="Ready")][0].status == "True")' >/dev/null
+    }
     sleep 20
     llm_report() { pod_tail "$llm_ns" "serving.kserve.io/inferenceservice=$LLM_NAME" kserve-container; }
     PROGRESS_FN=llm_report
@@ -196,6 +203,12 @@ else
     PROGRESS_FN=""
   else
     ok "GPU memory share ${current:-0.9} needs no change"
+  fi
+  stale=$(oc get pods -n "$llm_ns" -l "serving.kserve.io/inferenceservice=$LLM_NAME" -o json | jq -r --arg f "--gpu-memory-utilization=$LLM_GPU_FRACTION" '.items[] | select((.spec.containers[] | select(.name=="kserve-container") | .args | index($f)) == null) | .metadata.name')
+  if [ -n "$stale" ]; then
+    warn "predictor pod(s) still running with the old GPU share: $stale (a rolling update kept them); deleting so the card is released"
+    for pod in $stale; do run oc delete pod "$pod" -n "$llm_ns" --wait=false >/dev/null; done
+    if wait_for 600 "$LLM_NAME to run only with the new share" llm_ready; then ok "$LLM_NAME runs only with --gpu-memory-utilization=$LLM_GPU_FRACTION"; else fail "$LLM_NAME still not clean; oc get pods -n $llm_ns"; fi
   fi
   gpu_mem() { local pod; pod=$(oc get pods -n nvidia-gpu-operator -o name 2>/dev/null | grep -m1 'driver-daemonset'); [ -n "$pod" ] && oc exec -n nvidia-gpu-operator "$pod" -- nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader 2>/dev/null; }
   info "GPU memory now: $(gpu_mem || echo 'not readable (no driver pod found)')"

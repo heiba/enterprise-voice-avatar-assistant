@@ -1,22 +1,20 @@
-# Overrides for the team demo cluster (Red Hat demo platform, 1 node, 4x NVIDIA L4).
-# Used by deploy/argocd/application.yaml together with values.yaml.
-global:
-  domain: apps.ocp.6s896.sandbox2112.opentlc.com
-
-# Application images are built by .github/workflows/build-images.yaml and pushed
-# to quay.io/rh-ai-quickstart. The workflow rewrites the per-service image
-# references below after every successful build (pinned by commit).
+# Values for the demo cluster: a Red Hat Demo Platform "Red Hat OpenShift AI 3" environment,
+# single-node OpenShift 4.20 on one AWS g6 instance with a single NVIDIA L4 (24 GB).
+# SETUP.md walks through the whole setup. The cluster's apps domain is not stored here:
+# scripts/deploy-argocd.sh passes global.domain to the Argo CD application from the cluster
+# it is logged in to, so this file works unchanged on the next cluster.
+#
+# Application images are built by .github/workflows/build-images.yaml and pushed to
+# quay.io/rh-ai-quickstart. The workflow rewrites the per-service image references below
+# after every successful build (pinned by commit).
 images:
   registry: quay.io/rh-ai-quickstart
 
 voiceAgent:
   enabled: true
-  # Tavus renders the avatar from the agent audio; keys TAVUS_API_KEY and TAVUS_FACE_ID
-  # live in the assistant-integrations secret (oc set data), never in this file.
+  # Tavus renders the avatar from the agent audio. TAVUS_API_KEY (and optionally
+  # TAVUS_FACE_ID) come from the assistant-integrations secret (scripts/create-secrets.sh).
   avatarProvider: tavus
-  extraEnv:
-    # Tavus stock face "Jackie - Office"; overrides the value in the assistant-integrations secret.
-    TAVUS_FACE_ID: r67d1c9cac37
   # Faces offered in the UI (Tavus stock faces; scripts/list-tavus-faces.sh lists them).
   # The voice follows the declared gender through models.tts.voices; the first entry is the default.
   faces:
@@ -43,21 +41,36 @@ ingestion:
   enabled: true
   image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-ingestion:sha-f8f1ee2
 
+# One L4 shared by three vLLM servers through GPU time-slicing (scripts/bootstrap-cluster.sh,
+# GPU_SLICES=4 advertises the card as four nvidia.com/gpu). Each server gets a fixed share of
+# the 24 GB; the shares add up to 72% to leave room for the CUDA context of each process.
+# Granite Guardian does not fit next to them, so the guardrail provider is off on this cluster.
 models:
-  tts:
-    # Bright female Kokoro voice to match the Tavus stock face (af_bella, grade A-; af_heart is warmer).
-    voice: af_bella
-  # The LLM, embeddings, and guardrails come from this chart. Whisper reuses the
-  # model already served by OpenShift AI in the `whisper` namespace.
+  llm:
+    args:
+      - --max-model-len=8192
+      - --gpu-memory-utilization=0.45
+      - --max-num-seqs=8
+      - --enforce-eager
+      - --enable-auto-tool-choice
+      - --tool-call-parser=llama3_json
   stt:
-    deploy: false
-    # LLMInferenceService workloads serve TLS with a certificate from the
-    # OpenShift service CA, which every pod trusts through SERVICE_CA_FILE.
-    endpoint: https://redhataiwhisper-large-v3-turbo-kserve-workload-svc.whisper.svc.cluster.local:8000/v1
-    servedModelName: redhataiwhisper-large-v3-turbo
-  guardrails:
-    provider: granite-guardian
     deploy: true
+    args:
+      - --gpu-memory-utilization=0.15
+      - --enforce-eager
+  embeddings:
+    args:
+      - --runner=pooling
+      - --max-model-len=8192
+      - --gpu-memory-utilization=0.12
+      - --enforce-eager
+  guardrails:
+    provider: none
+    deploy: false
+  tts:
+    # Bright female Kokoro voice for the default face (af_bella, grade A-; af_heart is warmer).
+    voice: af_bella
 
 # Qdrant dashboard for the demo (protected by the API key from assistant-qdrant).
 qdrant:
@@ -66,14 +79,8 @@ qdrant:
 
 livekit:
   turn:
-    # TURN over TLS behind a passthrough Route. Needs the cluster's wildcard
-    # ingress certificate copied into the namespace as a kubernetes.io/tls
-    # secret named livekit-turn-tls (the pod waits for it).
+    # TURN over TLS behind a passthrough Route, needed for browsers behind corporate
+    # networks. The certificate secret is created by scripts/setup-turn-tls.sh (a copy of
+    # the cluster's wildcard certificate, or one issued by cert-manager).
     enabled: true
     tlsSecret: livekit-turn-tls
-
-n8n:
-  extraEnv:
-    # Google Drive folder that receives archived transcripts (WF5). Not a secret:
-    # the folder is only readable by the Google account connected in n8n.
-    GOOGLE_DOCS_FOLDER_ID: 1BT_vPj58sulZQIY7--05lrhP8WX9UbmX

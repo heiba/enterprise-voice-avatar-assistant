@@ -5,3 +5,4 @@ resources:
   - gpu-operator.yaml
   - rhoai.yaml
   - gitops.yaml
+  - cert-manager.yaml

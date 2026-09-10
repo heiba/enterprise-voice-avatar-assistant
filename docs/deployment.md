@@ -1,5 +1,7 @@
 # Deployment guide
 
+For a complete walk-through on a freshly provisioned cluster, including the platform prerequisites, GPU sharing, creating every key and the Argo CD path with scripts, see [SETUP.md](../SETUP.md). This guide documents the individual steps and options.
+
 The [README](../README.md) shows the one-command install. This page has the manual Helm steps behind it, the remote-model and Argo CD variants, the optional third-party accounts, and how to handle the generated secrets. Every chart value is documented in [../chart/README.md](../chart/README.md).
 
 ## Manual installation with Helm
@@ -63,6 +65,8 @@ echo https://$(oc get route/n8n -n ${PROJECT} --template='{{.spec.host}}')
 ```
 
 ## Deploying with Argo CD
+
+Scripted: `scripts/bootstrap-cluster.sh` (cluster admin, once) then `SECRETS_FILE=~/secrets.env scripts/deploy-argocd.sh`, see [SETUP.md](../SETUP.md). The steps below are what the scripts do.
 
 If the OpenShift GitOps operator is installed, Argo CD can own the deployment and keep it in sync with the `main` branch. It renders the same chart, so nothing differs from a manual install.
 

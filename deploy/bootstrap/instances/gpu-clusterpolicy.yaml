@@ -15,6 +15,10 @@ spec:
     enabled: true
   devicePlugin:
     enabled: true
+    # Time-slicing (gpu-time-slicing.yaml); remove `config` for exclusive GPUs.
+    config:
+      name: device-plugin-config
+      default: any
   dcgmExporter:
     enabled: true
   gfd:

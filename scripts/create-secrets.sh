@@ -5,11 +5,22 @@
 # Usage:
 #   NAMESPACE=voice-avatar-assistant scripts/create-secrets.sh
 #
-# Every value can be preset through the environment (see the variables below).
-# Existing secrets are kept unless FORCE=1 is set.
+# Every value can be preset through the environment (see the variables below), or put
+# in one KEY=value file and passed as SECRETS_FILE=<path> (template: secrets.env.example
+# in the repository root). Existing secrets are kept unless FORCE=1 is set (which also
+# regenerates every password) or REFRESH lists the secrets to rewrite, for example
+# REFRESH=assistant-integrations after changing an API key in the file.
 set -euo pipefail
 
 NS="${NAMESPACE:-voice-avatar-assistant}"
+if [ -n "${SECRETS_FILE:-}" ]; then
+  [ -r "${SECRETS_FILE}" ] || { echo "SECRETS_FILE ${SECRETS_FILE} is not readable"; exit 1; }
+  set -a
+  # shellcheck disable=SC1090
+  . "${SECRETS_FILE}"
+  set +a
+  echo "loaded ${SECRETS_FILE}"
+fi
 rand() { openssl rand -hex "${1:-16}"; }
 
 POSTGRES_USER="${POSTGRES_USER:-assistant}"
@@ -24,8 +35,9 @@ QDRANT_API_KEY="${QDRANT_API_KEY:-$(rand 24)}"
 
 make_secret() {
   local name="$1"; shift
-  if oc get secret "${name}" -n "${NS}" >/dev/null 2>&1 && [ "${FORCE:-0}" != "1" ]; then
-    echo "keep    ${name} (already exists; set FORCE=1 to overwrite)"
+  if oc get secret "${name}" -n "${NS}" >/dev/null 2>&1 && [ "${FORCE:-0}" != "1" ] \
+     && ! printf ',%s,' "${REFRESH:-}" | grep -q ",${name},"; then
+    echo "keep    ${name} (already exists; REFRESH=${name} rewrites it, FORCE=1 rewrites all)"
     return
   fi
   oc create secret generic "${name}" -n "${NS}" "$@" --dry-run=client -o yaml | oc apply -f - >/dev/null
@@ -74,7 +86,8 @@ make_secret assistant-integrations \
   --from-literal=TAVUS_FACE_ID="${TAVUS_FACE_ID:-}" \
   --from-literal=TAVUS_PAL_ID="${TAVUS_PAL_ID:-}" \
   --from-literal=ELEVENLABS_API_KEY="${ELEVENLABS_API_KEY:-}" \
-  --from-literal=GOOGLE_SERVICE_ACCOUNT_JSON="${GOOGLE_SERVICE_ACCOUNT_JSON:-}"
+  --from-literal=GOOGLE_SERVICE_ACCOUNT_JSON="${GOOGLE_SERVICE_ACCOUNT_JSON:-}" \
+  --from-literal=GOOGLE_DOCS_FOLDER_ID="${GOOGLE_DOCS_FOLDER_ID:-}"
 
 echo
 echo "Secrets are in namespace ${NS}. Back up assistant-n8n: losing N8N_ENCRYPTION_KEY makes the credentials stored in n8n unreadable."

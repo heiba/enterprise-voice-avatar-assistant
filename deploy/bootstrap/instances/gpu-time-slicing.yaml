@@ -1,0 +1,22 @@
+# GPU time-slicing: each physical GPU is advertised as several nvidia.com/gpu resources so
+# that more than one model server can run on it (the vLLM servers then share the memory
+# through --gpu-memory-utilization). scripts/bootstrap-cluster.sh writes the replica count
+# from GPU_SLICES and points the ClusterPolicy at this ConfigMap. Key "any" applies to
+# every GPU model through devicePlugin.config.default.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: device-plugin-config
+  namespace: nvidia-gpu-operator
+data:
+  any: |-
+    version: v1
+    flags:
+      migStrategy: none
+    sharing:
+      timeSlicing:
+        renameByDefault: false
+        failRequestsGreaterThanOne: false
+        resources:
+          - name: nvidia.com/gpu
+            replicas: 4

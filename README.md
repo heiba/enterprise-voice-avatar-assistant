@@ -209,6 +209,8 @@ All optional: Tavus (or Simli, Hedra) for avatar video, Slack for notifications 
 
 ## Deploy
 
+Starting from a freshly provisioned cluster, for example a Red Hat Demo Platform environment with a single GPU? [SETUP.md](SETUP.md) is the end-to-end guide: platform checks, GPU sharing, every key and integration created from scratch, Argo CD deployment, n8n setup and verification, with one script per phase.
+
 ### Prerequisites
 
 Before deploying, ensure you have:
@@ -245,7 +247,7 @@ PROJECT=voice-avatar-assistant scripts/deploy.sh
 
 **Manual Helm steps.** Secrets, `helm install`, per-model options and the n8n workflows step by step: [docs/deployment.md](docs/deployment.md#manual-installation-with-helm).
 
-**Argo CD.** The same chart driven by the OpenShift GitOps operator from a values file per cluster: [docs/deployment.md](docs/deployment.md#deploying-with-argo-cd).
+**Argo CD.** The same chart driven by the OpenShift GitOps operator: `SECRETS_FILE=~/secrets.env scripts/deploy-argocd.sh` after `scripts/bootstrap-cluster.sh`, both described in [SETUP.md](SETUP.md); the manual steps are in [docs/deployment.md](docs/deployment.md#deploying-with-argo-cd).
 
 The generated secrets, how to read, rotate and back them up, are described in [docs/deployment.md](docs/deployment.md#working-with-the-generated-secrets).
 

@@ -117,6 +117,12 @@ spec:
         - name: n8n
           image: {{ .Values.n8n.image }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          # Integration settings such as GOOGLE_DOCS_FOLDER_ID come from the secret created by
+          # scripts/create-secrets.sh; explicit env entries below (extraEnv) win over it.
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secrets.integrations }}
+                optional: true
           env:
             {{- include "assistant.n8nEnv" . | nindent 12 }}
           ports:

@@ -13,9 +13,11 @@
 # instead, run it with PROFILE=remote and REMOTE_LLM_ENDPOINT, REMOTE_LLM_MODEL,
 # REMOTE_STT_ENDPOINT, REMOTE_EMB_ENDPOINT (and the keys in ~/secrets.env).
 #
-# Progress and discovered facts are kept in ~/.assistant-setup/state.env, logs in
-# ~/.assistant-setup/logs/. Every step checks the cluster before doing anything, so work
-# done by hand or by an earlier run is recognised and not repeated.
+# Progress and discovered facts are kept in ~/.assistant-setup/state.env. Every run is logged
+# to ~/.assistant-setup/logs/setup-<timestamp>.log (the bootstrap and deploy steps add their
+# own logs next to it); DEBUG=1 also writes a full command trace to <log>.trace. Every step
+# checks the cluster before doing anything, so work done by hand or by an earlier run is
+# recognised and not repeated.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STATE_DIR="${STATE_DIR:-$HOME/.assistant-setup}"
@@ -27,10 +29,23 @@ YES=0; MODE=next; ONLY=""
 for a in "$@"; do case "$a" in --status) MODE=status;; --yes|-y) YES=1;; --reset) MODE=reset;; --step) MODE=step;; [0-9]*) ONLY="$a";; -h|--help) sed -n 2,14p "$0"; exit 0;; esac; done
 mkdir -p "$STATE_DIR/logs"; touch "$STATE"; chmod 700 "$STATE_DIR"
 [ "$MODE" = reset ] && { rm -f "$STATE"; touch "$STATE"; echo "progress forgotten ($STATE)"; exit 0; }
+RUN_LOG="$STATE_DIR/logs/setup-$(date +%Y%m%d-%H%M%S).log"
+exec > >(tee -a "$RUN_LOG") 2>&1
+if [ "${DEBUG:-0}" = 1 ]; then exec {BASH_XTRACEFD}>>"$RUN_LOG.trace"; export PS4='+ $(date +%H:%M:%S) ${BASH_SOURCE##*/}:${LINENO}: '; set -x; fi
+printf '%s setup started by %s on %s; log %s\n' "$(date +%Y-%m-%dT%H:%M:%S)" "$(id -un)" "$(hostname)" "$RUN_LOG"
 
 # ---------------------------------------------------------------- helpers -------------------
 B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; D=$'\033[2m'; N=$'\033[0m'
 say()  { printf '%s\n' "$*"; }
+ts()   { date +%H:%M:%S; }
+run_step() {  # run_step N: runs stepN with a timestamped header and footer, records the duration
+  local n=$1 start rc; start=$(date +%s)
+  say ""; say "$(ts) ${D}---- step $n: ${STEPS[$((n-1))]} ----${N}"
+  "step$n"; rc=$?
+  save "STEP_${n}_LAST_RUN" "$(date +%Y-%m-%dT%H:%M) rc=$rc $(( $(date +%s) - start ))s"
+  say "$(ts) ${D}---- step $n finished in $(( $(date +%s) - start ))s, exit $rc ----${N}"
+  return $rc
+}
 ok()   { printf '  %sOK%s   %s\n' "$G" "$N" "$1"; }
 warn() { printf '  %sWARN%s %s\n' "$Y" "$N" "$1"; }
 bad()  { printf '  %sFAIL%s %s\n' "$R" "$N" "$1"; }
@@ -160,7 +175,7 @@ step_state() {  # prints done|todo|attention and a detail
 show_status() {
   say ""; say "${B}Enterprise voice avatar assistant: setup${N}"
   if [ "$LOGGED_IN" = 1 ]; then say "  cluster $API as $USER_NAME, apps domain $DOMAIN"; else say "  ${R}not logged in${N}: the script asks for the API URL, user and password when run"; fi
-  say "  progress file $STATE, logs $STATE_DIR/logs"; say ""
+  say "  progress file $STATE; this run's log $RUN_LOG"; say ""
   NEXT=""
   for i in 1 2 3 4 5 6 7 8 9; do
     local st; st=$(step_state $i); local kind=${st%%|*} detail=${st#*|} icon="○"
@@ -231,6 +246,7 @@ step3() {
 step4() {
   say "${B}Step 4: TURN certificate${N} (voice through corporate networks needs TURN over TLS with a trusted certificate)"
   [ "$PROJECT_EXISTS" = yes ] || { bad "project missing; run step 3 first"; return 1; }
+  say "  \$ scripts/setup-turn-tls.sh copy"
   if PROJECT="$PROJECT" "$ROOT/scripts/setup-turn-tls.sh" copy; then mark 4; return 0; fi
   warn "the cluster's wildcard certificate cannot be used; cert-manager can request one from Let's Encrypt (the apps domain must be reachable from the internet)"
   [ "$YES" = 1 ] || ask ACME_EMAIL "E-mail for Let's Encrypt (empty to skip TURN for now)" "${ACME_EMAIL:-}"
@@ -311,6 +327,7 @@ step7() {
 step8() {
   say "${B}Step 8: sample documents${N} (15 policies, procedures, an invoice and a contract)"
   [ "${PODS_NOT_READY:-1}" = 0 ] || { bad "pods not ready; run step 6 first"; return 1; }
+  say "  \$ NS=$PROJECT scripts/load-sample-docs.sh"
   NS="$PROJECT" "$ROOT/scripts/load-sample-docs.sh" | sed 's/^/  /' || { bad "upload failed"; return 1; }
   say "  waiting for ingestion (Slack #assistant-ingestion reports each document)"
   local waited=0 n=0
@@ -325,6 +342,7 @@ step9() {
   say "${B}Step 9: verification${N}"
   local extra=(); [ -f "$STATE_DIR/values-object.json" ] && extra=(-f "$STATE_DIR/values-object.json")
   local llm_set=(); [ -f "$HOME/assistant-cluster.env" ] && { . "$HOME/assistant-cluster.env"; llm_set=(--set "models.llm.endpoint=$LLM_ENDPOINT" --set "models.llm.servedModelName=$LLM_MODEL"); }
+  say "  \$ NS=$PROJECT scripts/demo-preflight.sh -f chart/values-demo-cluster.yaml ${extra[*]:-} --set global.domain=$DOMAIN ${llm_set[*]:-}"
   if NS="$PROJECT" "$ROOT/scripts/demo-preflight.sh" -f "$ROOT/chart/values-demo-cluster.yaml" "${extra[@]}" --set "global.domain=$DOMAIN" "${llm_set[@]}"; then
     mark 9; say ""; say "  ${G}Ready for the demo.${N}"; say "  frontend $FRONTEND_URL"; say "  n8n      $N8N_URL"
     say "  Walk through docs/demo-script.md: a cited text answer, a voice session (the browser asks for the microphone), a request by voice with its Slack card, the archive button."
@@ -335,15 +353,16 @@ step9() {
 # ---------------------------------------------------------------- main ----------------------
 command -v jq >/dev/null || { echo "jq is required: sudo dnf install -y jq"; exit 1; }
 [ "$MODE" = status ] || ensure_login || { discover; show_status; exit 1; }
+say "$(ts) discovering the cluster (a few seconds)"
 discover; show_status
 case "$MODE" in
 status) exit 0 ;;
-step) [ -n "$ONLY" ] || { echo "usage: scripts/setup.sh --step N"; exit 1; }; "step$ONLY"; rc=$?; discover; show_status; exit $rc ;;
+step) [ -n "$ONLY" ] || { echo "usage: scripts/setup.sh --step N"; exit 1; }; run_step "$ONLY"; rc=$?; discover; show_status; exit $rc ;;
 esac
 while :; do
   [ -n "$NEXT" ] || { say "  ${G}Every step is done.${N} scripts/setup.sh --step N runs one again."; exit 0; }
-  say "  Running step $NEXT, ${STEPS[$((NEXT-1))]}."
-  "step$NEXT"; rc=$?
+  run_step "$NEXT"; rc=$?
+  say "$(ts) refreshing the cluster state"
   discover; show_status
   [ "$rc" = 0 ] || { say "  ${R}Stopped at step $NEXT${N}: fix what is reported above, then run scripts/setup.sh again (it resumes there)."; exit 1; }
 done

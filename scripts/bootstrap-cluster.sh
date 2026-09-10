@@ -30,16 +30,28 @@ warn() { printf '  \033[33mWARN\033[0m %s\n' "$1"; }
 fail() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; FAILED=$((FAILED + 1)); }
 debug(){ printf '  debug: %s\n' "$1"; }
 run()  { printf '  $ %s\n' "$*"; "$@"; }
-# wait_for <seconds> <description> <command...>: polls every 10 s, prints progress every minute
+# wait_for <seconds> <description> <command...>: polls every 10 s; every 30 s prints how long it
+# has waited and, when PROGRESS_FN names a function, that function's one-line report
+PROGRESS_FN=""
 wait_for() {
   local timeout=$1 what=$2; shift 2
   local waited=0
   while ! "$@" >/dev/null 2>&1; do
     if [ "$waited" -ge "$timeout" ]; then return 1; fi
     sleep 10; waited=$((waited + 10))
-    [ $((waited % 60)) -eq 0 ] && info "still waiting for $what (${waited}s)"
+    if [ $((waited % 30)) -eq 0 ]; then
+      info "waiting for $what (${waited}s)$( [ -n "$PROGRESS_FN" ] && printf ': %s' "$($PROGRESS_FN 2>/dev/null | cut -c1-200)")"
+    fi
   done
   return 0
+}
+# last log line of the newest pod matching a selector: pod_tail <namespace> <selector> [container]
+pod_tail() {
+  local pod; pod=$(oc get pods -n "$1" -l "$2" --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].metadata.name}' 2>/dev/null)
+  [ -n "$pod" ] || { echo "no pod yet"; return; }
+  local phase; phase=$(oc get pod "$pod" -n "$1" -o jsonpath='{.status.phase} ready={.status.containerStatuses[*].ready} restarts={.status.containerStatuses[*].restartCount}' 2>/dev/null)
+  local line; line=$(oc logs "$pod" -n "$1" ${3:+-c "$3"} --tail=1 2>/dev/null | tr -d '\r' | tail -1)
+  echo "$pod $phase; log: ${line:-<none yet>}"
 }
 # CSVs are looked up in the operator's namespace (and openshift-operators); a cluster-wide
 # listing returns every copied CSV of every namespace and takes minutes on a busy cluster
@@ -72,8 +84,11 @@ install_operator() {  # <display name> <csv prefix> <manifest>
   if [ "$INSTALL_MISSING" != "1" ]; then fail "$name is not installed (INSTALL_MISSING=0, so not installing): oc apply -f $manifest"; return 1; fi
   info "$name is missing; installing from $manifest"
   run oc apply -f "$ROOT/$manifest" >/dev/null
+  op_report() { csv_phase "$prefix" || oc get subscription -A -o jsonpath="{range .items[?(@.spec.name)]}{.spec.name}={.status.state} {end}" 2>/dev/null | tr ' ' '\n' | grep -i "${prefix%%-*}" | tr '\n' ' '; }
+  PROGRESS_FN=op_report
   if wait_for 900 "$name" csv_succeeded "$prefix"; then ok "$name $(csv_phase "$prefix" | cut -d' ' -f2) installed"; else
-    fail "$name did not reach Succeeded in 15 min"; debug "oc get csv -A | grep -i '${prefix}'; oc get subscription -A; oc get installplan -A"; return 1; fi
+    fail "$name did not reach Succeeded in 15 min"; debug "oc get csv -n $(csv_ns "$prefix"); oc get subscription -A; oc get installplan -A"; PROGRESS_FN=""; return 1; fi
+  PROGRESS_FN=""
 }
 install_operator "Node Feature Discovery" "nfd" deploy/bootstrap/operators/nfd.yaml
 install_operator "NVIDIA GPU Operator" "gpu-operator-certified" deploy/bootstrap/operators/gpu-operator.yaml
@@ -104,8 +119,11 @@ if [ -n "$dsc" ]; then
     run oc patch datasciencecluster "$dsc" --type merge -p '{"spec":{"components":{"kserve":{"managementState":"Managed","rawDeploymentServiceConfig":"Headless"}}}}' >/dev/null
   fi
   dsc_ready() { [ "$(oc get datasciencecluster "$dsc" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')" = "True" ]; }
+  dsc_report() { oc get datasciencecluster "$dsc" -o jsonpath='{range .status.conditions[?(@.status=="False")]}{.type}={.reason} {end}' 2>/dev/null; }
+  PROGRESS_FN=dsc_report
   if wait_for 600 "DataScienceCluster $dsc Ready" dsc_ready; then ok "DataScienceCluster $dsc Ready"; else
     fail "DataScienceCluster $dsc not Ready after 10 min"; debug "oc describe datasciencecluster $dsc | sed -n '/Conditions/,\$p'; oc get pods -n redhat-ods-applications"; fi
+  PROGRESS_FN=""
   if wait_for 300 "KServe controller" oc get deployment kserve-controller-manager -n redhat-ods-applications; then ok "KServe controller present"; else fail "kserve-controller-manager deployment missing in redhat-ods-applications"; fi
   ok "OpenShift AI dashboard: https://$(oc get route rhods-dashboard -n redhat-ods-applications -o jsonpath='{.spec.host}' 2>/dev/null || echo '<no route yet>')"
 fi
@@ -126,8 +144,11 @@ if oc get clusterpolicy -o name 2>/dev/null | grep -q .; then ok "ClusterPolicy 
 fi
 policy=$(oc get clusterpolicy -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 policy_ready() { [ "$(oc get clusterpolicy "$policy" -o jsonpath='{.status.state}')" = "ready" ]; }
+gpu_pods_report() { oc get pods -n nvidia-gpu-operator --no-headers 2>/dev/null | awk '{print $1":"$3}' | grep -v Running | grep -v Completed | tr '\n' ' '; }
+PROGRESS_FN=gpu_pods_report
 if wait_for 1200 "ClusterPolicy $policy (driver build can take 10 min)" policy_ready; then ok "ClusterPolicy $policy ready"; else
   fail "ClusterPolicy $policy is $(oc get clusterpolicy "$policy" -o jsonpath='{.status.state}')"; debug "oc get pods -n nvidia-gpu-operator; oc logs -n nvidia-gpu-operator -l app=nvidia-driver-daemonset --tail=50"; fi
+PROGRESS_FN=""
 gpu_discovered() { oc get nodes -l nvidia.com/gpu.present=true -o name 2>/dev/null | grep -q .; }
 if wait_for 300 "GPU feature discovery labels" gpu_discovered; then ok "GPU nodes: $(oc get nodes -l nvidia.com/gpu.present=true -o name | tr '\n' ' ')"; else
   fail "no node carries nvidia.com/gpu.present=true"; debug "oc get pods -n nvidia-gpu-operator -l app=gpu-feature-discovery; oc get nodes --show-labels | grep -o 'nvidia.com/gpu[^,]*' | sort -u"; fi
@@ -168,8 +189,11 @@ else
     run oc patch isvc "$LLM_NAME" -n "$llm_ns" --type merge -p "{\"spec\":{\"predictor\":{\"model\":{\"args\":$newargs}}}}" >/dev/null
     llm_ready() { [ "$(oc get isvc "$LLM_NAME" -n "$llm_ns" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')" = "True" ] && [ "$(oc get pods -n "$llm_ns" -l "serving.kserve.io/inferenceservice=$LLM_NAME" --no-headers | grep -c Running)" = "1" ]; }
     sleep 20
-    if wait_for 900 "$LLM_NAME to restart with the new share" llm_ready; then ok "$LLM_NAME Ready with --gpu-memory-utilization=$LLM_GPU_FRACTION"; else
+    llm_report() { pod_tail "$llm_ns" "serving.kserve.io/inferenceservice=$LLM_NAME" kserve-container; }
+    PROGRESS_FN=llm_report
+    if wait_for 900 "$LLM_NAME to restart with the new share (vLLM reloads the weights, 2 to 5 min)" llm_ready; then ok "$LLM_NAME Ready with --gpu-memory-utilization=$LLM_GPU_FRACTION"; else
       fail "$LLM_NAME did not come back Ready"; debug "oc get pods -n $llm_ns; oc logs -n $llm_ns -l serving.kserve.io/inferenceservice=$LLM_NAME --tail=50"; fi
+    PROGRESS_FN=""
   else
     ok "GPU memory share ${current:-0.9} needs no change"
   fi
@@ -178,8 +202,11 @@ fi
 
 step "Argo CD"
 argo_ready() { [ "$(oc get deployment openshift-gitops-server -n openshift-gitops -o jsonpath='{.status.readyReplicas}' 2>/dev/null)" = "1" ]; }
+argo_report() { oc get pods -n openshift-gitops --no-headers 2>/dev/null | awk '{print $1":"$3}' | tr '\n' ' '; }
+PROGRESS_FN=argo_report
 if wait_for 600 "Argo CD server" argo_ready; then ok "Argo CD: https://$(oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}')"; else
   fail "openshift-gitops-server is not ready"; debug "oc get pods -n openshift-gitops; oc get argocd -n openshift-gitops"; fi
+PROGRESS_FN=""
 
 step "Project $PROJECT"
 if oc get namespace "$PROJECT" >/dev/null 2>&1; then ok "project exists"; else run oc new-project "$PROJECT" >/dev/null && ok "project created"; fi

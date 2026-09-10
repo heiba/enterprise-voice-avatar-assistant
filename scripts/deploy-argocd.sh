@@ -43,7 +43,7 @@ wait_for() {
   while ! "$@" >/dev/null 2>&1; do
     if [ "$waited" -ge "$timeout" ]; then return 1; fi
     sleep 15; waited=$((waited + 15))
-    [ $((waited % 60)) -eq 0 ] && info "still waiting for $what (${waited}s)"
+    [ $((waited % 30)) -eq 0 ] && info "waiting for $what (${waited}s)$( [ "$what" = "all pods" ] && printf ': %s' "$(pods_report | cut -c1-200)")"
   done
   return 0
 }
@@ -102,8 +102,8 @@ waited=0
 until synced; do
   if [ "$waited" -ge 1800 ]; then break; fi
   sleep 20; waited=$((waited + 20))
-  if [ $((waited % 60)) -eq 0 ]; then
-    info "application $(app_status) after ${waited}s"
+  if [ $((waited % 40)) -eq 0 ]; then
+    info "application $(app_status) after ${waited}s; pods not ready: $(oc get pods -n "$PROJECT" --no-headers 2>/dev/null | grep -v -E 'Running|Completed' | awk '{print $1":"$3}' | tr '\n' ' ')"
     oc get application "$APP" -n openshift-gitops -o json | jq -r '.status.resources[]? | select(.health.status != null and .health.status != "Healthy") | "     \(.kind)/\(.name): \(.health.status) \(.health.message // "")"' | head -8
     [ "$(oc get application "$APP" -n openshift-gitops -o jsonpath='{.status.operationState.phase}')" = "Error" ] && oc get application "$APP" -n openshift-gitops -o jsonpath='{.status.operationState.message}{"\n"}' | cut -c1-300 | sed 's/^/     /'
   fi
@@ -117,9 +117,14 @@ if oc get isvc -n "$PROJECT" -o name 2>/dev/null | grep -q .; then
   until models_ready; do
     if [ "$waited" -ge 2400 ]; then break; fi
     sleep 30; waited=$((waited + 30))
-    if [ $((waited % 120)) -eq 0 ]; then
-      info "models after ${waited}s (weights download on first start takes 10 to 20 min):"
+    if [ $((waited % 60)) -eq 0 ]; then
+      info "models after ${waited}s (weights download on first start takes 5 to 15 min):"
       oc get isvc -n "$PROJECT" -o custom-columns='NAME:.metadata.name,READY:.status.conditions[?(@.type=="Ready")].status,REASON:.status.conditions[?(@.type=="Ready")].reason' | sed 's/^/     /'
+      for isvc in $(oc get isvc -n "$PROJECT" -o jsonpath='{.items[*].metadata.name}'); do
+        pod=$(oc get pods -n "$PROJECT" -l "serving.kserve.io/inferenceservice=$isvc" --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].metadata.name}' 2>/dev/null)
+        [ -n "$pod" ] || { printf '     %s: no pod yet\n' "$isvc"; continue; }
+        printf '     %s: %s; log: %s\n' "$isvc" "$(oc get pod "$pod" -n "$PROJECT" -o jsonpath='{.status.phase} ready={.status.containerStatuses[*].ready}')" "$(oc logs "$pod" -n "$PROJECT" -c kserve-container --tail=1 2>/dev/null | tr -d '\r' | cut -c1-160)"
+      done
     fi
   done
   if models_ready; then ok "all InferenceServices Ready"; oc get isvc -n "$PROJECT" -o custom-columns='NAME:.metadata.name,READY:.status.conditions[?(@.type=="Ready")].status' | sed 's/^/     /'; else
@@ -130,6 +135,7 @@ fi
 
 step "Pods"
 pods_ready() { ! oc get pods -n "$PROJECT" --no-headers 2>/dev/null | grep -v -E 'Running|Completed' | grep -q .; }
+pods_report() { oc get pods -n "$PROJECT" --no-headers 2>/dev/null | grep -v -E 'Running|Completed' | awk '{print $1":"$3}' | tr '\n' ' '; }
 if wait_for 900 "all pods" pods_ready; then ok "all pods Running or Completed"; else
   fail "some pods are not ready:"; oc get pods -n "$PROJECT" --no-headers | grep -v -E 'Running|Completed' | sed 's/^/     /'; debug "oc describe pod <name> -n $PROJECT; oc logs <name> -n $PROJECT --previous"; fi
 

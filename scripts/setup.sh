@@ -344,10 +344,17 @@ step5() {
   fi
   say ""; say "  keys present in $SECRETS_FILE:"; grep -v '^#' "$SECRETS_FILE" | grep -v '=$' | grep -v '^$' | sed 's/=.*/=<set>/' | sed 's/^/     /'
   note "edit the file at any time with: nano $SECRETS_FILE ; the deploy step (6) applies it. Changed a key later? scripts/setup.sh --step 5 then --step 6."
+  [ "$PROJECT_EXISTS" = yes ] || { bad "project $PROJECT missing; run step 3 first"; return 1; }
   if [ "$SECRETS_IN_CLUSTER" = yes ]; then
     note "rewriting the integrations and model-key secrets in the cluster from the file (passwords are kept)"
-    NAMESPACE="$PROJECT" SECRETS_FILE="$SECRETS_FILE" REFRESH=assistant-integrations,assistant-models "$ROOT/scripts/create-secrets.sh" | sed 's/^/  /'
+    NAMESPACE="$PROJECT" SECRETS_FILE="$SECRETS_FILE" REFRESH=assistant-integrations,assistant-models "$ROOT/scripts/create-secrets.sh" | sed 's/^/  /' || return 1
+  else
+    note "creating the secrets in $PROJECT from the file (passwords are generated)"
+    NAMESPACE="$PROJECT" SECRETS_FILE="$SECRETS_FILE" "$ROOT/scripts/create-secrets.sh" | sed 's/^/  /' || return 1
   fi
+  for key in SLACK_BOT_TOKEN TAVUS_API_KEY GOOGLE_DOCS_FOLDER_ID; do
+    if [ -n "$(oc get secret assistant-integrations -n "$PROJECT" -o jsonpath="{.data.$key}" 2>/dev/null)" ]; then ok "$key in the cluster"; else warn "$key empty (feature off)"; fi
+  done
   mark 5
 }
 step6() {
@@ -422,8 +429,10 @@ step) [ -n "$ONLY" ] || { echo "usage: scripts/setup.sh --step N"; exit 1; }; ru
 esac
 while :; do
   [ -n "$NEXT" ] || { say "  ${G}Every step is done.${N} scripts/setup.sh --step N runs one again."; exit 0; }
-  run_step "$NEXT"; rc=$?
+  current=$NEXT
+  run_step "$current"; rc=$?
   say "$(ts) refreshing the cluster state"
   QUIET_DISCOVERY=1 discover; show_status
-  [ "$rc" = 0 ] || { say "  ${R}Stopped at step $NEXT${N}: fix what is reported above, then run scripts/setup.sh again (it resumes there)."; exit 1; }
+  [ "$rc" = 0 ] || { say "  ${R}Stopped at step $current${N}: fix what is reported above, then run scripts/setup.sh again (it resumes there)."; exit 1; }
+  [ "$NEXT" != "$current" ] || { say "  ${R}Step $current finished but the cluster does not show it as done${N} (see its line above); run scripts/setup.sh --step $current after fixing, or report this output."; exit 1; }
 done

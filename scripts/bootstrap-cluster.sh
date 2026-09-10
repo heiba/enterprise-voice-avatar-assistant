@@ -177,6 +177,8 @@ if wait_for 600 "Argo CD server" argo_ready; then ok "Argo CD: https://$(oc get 
 step "Project $PROJECT"
 if oc get namespace "$PROJECT" >/dev/null 2>&1; then ok "project exists"; else run oc new-project "$PROJECT" >/dev/null && ok "project created"; fi
 run oc label namespace "$PROJECT" argocd.argoproj.io/managed-by=openshift-gitops --overwrite >/dev/null && ok "managed by openshift-gitops"
+# shown as a data science project in the OpenShift AI dashboard, with the chart's models and their metrics
+run oc label namespace "$PROJECT" opendatahub.io/dashboard=true --overwrite >/dev/null && ok "visible in the OpenShift AI dashboard"
 run oc apply -f "$ROOT/deploy/argocd/appproject.yaml" >/dev/null && ok "AppProject applied"
 
 step "Summary"

@@ -36,7 +36,7 @@ anyone else needs a cluster with the same properties.
 |---|---|
 | 1. OpenShift Container Platform 4.20, single-node (SNO) | One AWS GPU instance runs everything. OpenShift Lightspeed is enabled on it (not used by the assistant) |
 | 2. Red Hat OpenShift AI 3 | Installed from the `stable-3.x` channel, with KServe enabled and the supporting operators from the environment's own guide: cert-manager, Node Feature Discovery, NVIDIA GPU Operator, Red Hat Connectivity Link |
-| 3. A Llama 3.2 3B Instruct model deployed as `llama-32-3b-instruct` | Deployed from the OpenShift AI model catalog by following the environment's guide. The assistant uses it as its language model; the chart deploys no other LLM on this cluster |
+| 3. A Llama 3.2 3B Instruct model deployed as `llama-32-3b-instruct` | Deployed from the OpenShift AI model catalog by following the environment's guide: project `my-first-model`, vLLM runtime in standard (raw) mode, no token authentication, and `--gpu-memory-utilization=0.95`, which step 3 lowers. The assistant uses it as its language model; the chart deploys no other LLM on this cluster |
 | 4. A bastion host | SSH access with `oc` logged in as `kubeadmin`. The provisioning e-mail or Showroom page has the host, user and password. Every command in this guide runs there unless it says **laptop** |
 | Instance size | **g6.8xlarge**: 32 vCPU, 128 GB RAM, one NVIDIA L4 with 24 GB. Every `g6.*xlarge` size has a single L4; `g6.12xlarge` and `g6.24xlarge` have four, `g6.48xlarge` eight |
 
@@ -135,7 +135,7 @@ What each step does and what to expect:
 | 5 GPU Operator | Creates the ClusterPolicy if absent, waits for it, applies the time-slicing ConfigMap and points the ClusterPolicy at it, waits until the node advertises `GPU_SLICES` GPUs | `allocatable nvidia.com/gpu = 4` | 1 to 10 min |
 | 6 Language model | Finds `llama-32-3b-instruct`, prints its vLLM arguments, and if its GPU memory share is above `LLM_GPU_FRACTION` (0.6) patches the InferenceService and waits for the model to come back Ready | `Ready with --gpu-memory-utilization=0.6`, then the GPU memory in use | 2 to 5 min |
 | 7 Argo CD | Waits for the Argo CD server, prints its URL | URL | 1 min |
-| 8 Project | Creates `voice-avatar-assistant`, labels it for Argo CD, applies the AppProject | `OK` | seconds |
+| 8 Project | Creates `voice-avatar-assistant`, labels it for Argo CD and for the OpenShift AI dashboard (the chart's models appear there with their metrics), applies the AppProject | `OK` | seconds |
 | 9 Summary | Runs `scripts/check-prereqs.sh` | `All required checks passed` | seconds |
 
 Verify afterwards:

@@ -56,7 +56,21 @@ unsave() { { grep -v "^$1=" "$STATE" 2>/dev/null || true; } > "$STATE.tmp"; mv "
 mark() { save "STEP_$1_DONE" "$(date +%Y-%m-%dT%H:%M)"; }
 # ask <var> <prompt> <default>: interactive unless --yes; empty answer keeps the default
 ask() { local var=$1 prompt=$2 def=${3:-}; local ans; if [ "$YES" = 1 ] && [ -n "$def" ]; then ans=$def; else read -r -p "  $prompt${def:+ [$def]}: " ans; ans=${ans:-$def}; fi; printf -v "$var" '%s' "$ans"; }
-ask_secret() { local var=$1 prompt=$2; local ans=""; if [ "$YES" != 1 ]; then read -rs -p "  $prompt (typed text stays hidden, Enter to skip): " ans; echo; fi; printf -v "$var" '%s' "$ans"; }
+ask_secret() { local var=$1 prompt=$2; local ans=""; if [ "$YES" != 1 ]; then read -rs -p "  $prompt (typed text stays hidden): " ans; echo; fi; printf -v "$var" '%s' "$ans"; }
+# need_key <KEY> <prompt> [regex] [hint]: a value for the secrets file, asked with hidden input
+# until one is given (and matches the pattern); values already in the file are not asked again.
+# With --yes nothing can be asked, so the key must already be in the file.
+need_key() {
+  local key=$1 prompt=$2 re=${3:-.} hint=${4:-}; local v
+  if [ -n "${!key:-}" ]; then ok "$key already in the file"; return 0; fi
+  [ "$YES" != 1 ] || { bad "$key is missing in $SECRETS_FILE and --yes cannot ask for it; add it and run again"; return 1; }
+  while :; do
+    read -rs -p "  $prompt (typed text stays hidden): " v; echo
+    [ -n "$v" ] || { say "     ${Y}a value is needed${N}${hint:+: $hint}"; continue; }
+    [[ "$v" =~ $re ]] || { say "     ${Y}that does not look like it${N}${hint:+ ($hint)}; paste it again"; continue; }
+    put "$key" "$v"; printf -v "$key" '%s' "$v"; export "$key"; ok "$key saved to $SECRETS_FILE"; return 0
+  done
+}
 confirm() { local ans; [ "$YES" = 1 ] && return 0; read -r -p "  $1 [Y/n]: " ans; [ -z "$ans" ] || [[ "$ans" =~ ^[Yy] ]]; }
 logfile() { echo "$STATE_DIR/logs/$1-$(date +%Y%m%d-%H%M%S).log"; }
 # shellcheck disable=SC1090
@@ -351,10 +365,10 @@ step5() {
   say "  paste n8n/slack-app-manifest.json with N8N_HOST replaced by $n8n_host, install the app to the workspace,"
   say "  copy the Bot User OAuth Token (xoxb-…). Create the channels"
   say "  #assistant-ingestion #assistant-documents #assistant-approvals #assistant-tickets #assistant-knowledge-gaps and invite the app to each."
-  if [ -n "${SLACK_BOT_TOKEN:-}" ]; then ok "SLACK_BOT_TOKEN already in the file"; else ask_secret v "Bot User OAuth Token"; [ -n "$v" ] && put SLACK_BOT_TOKEN "$v"; fi
+  need_key SLACK_BOT_TOKEN "Bot User OAuth Token" '^xoxb-' "it starts with xoxb-" || return 1
   say ""
   say "  ${B}Tavus${N} (avatar video). On your laptop: https://platform.tavus.io > developer settings > API key. Free plan: 25 minutes a month, one stream."
-  if [ -n "${TAVUS_API_KEY:-}" ]; then ok "TAVUS_API_KEY already in the file"; else ask_secret v "Tavus API key"; [ -n "$v" ] && put TAVUS_API_KEY "$v"; fi
+  need_key TAVUS_API_KEY "Tavus API key" '^[A-Za-z0-9_-]{16,}$' "the key from the Tavus developer settings" || return 1
   say ""
   say "  ${B}Google Docs${N} (transcript archival, no sign-in). On your laptop, in Google Cloud console: a project; APIs & Services > Library:"
   say "  enable the Google Drive API; IAM & Admin > Service Accounts > Create service account (any name, no roles) > Keys > Add key > JSON."
@@ -362,34 +376,51 @@ step5() {
   say "  In Google Drive create a folder for transcripts, share it with the service account's e-mail (client_email in the key file) as Editor;"
   say "  the folder id is the part of its URL after /folders/."
   local sa_file="$STATE_DIR/google-sa.json"
-  if [ -n "${GOOGLE_SERVICE_ACCOUNT_FILE:-}" ] && [ -r "${GOOGLE_SERVICE_ACCOUNT_FILE/#\~/$HOME}" ]; then
-    ok "service account key already in the file ($(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("client_email","?"))' "${GOOGLE_SERVICE_ACCOUNT_FILE/#\~/$HOME}" 2>/dev/null))"
-  elif [ "$YES" != 1 ]; then
-    say "  Paste the JSON key now and finish with a line containing only }  (or type a path to the file; Enter alone skips):"
-    local buf="" line first=1
-    while IFS= read -rs line; do
-      if [ "$first" = 1 ]; then
-        first=0
-        [ -z "$line" ] && break
-        case "$line" in /*|~*) line="${line/#\~/$HOME}"; [ -r "$line" ] && { put GOOGLE_SERVICE_ACCOUNT_FILE "$line"; ok "service account $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("client_email","?"))' "$line" 2>/dev/null)"; } || warn "$line is not readable; skipped"; buf=""; break;; esac
+  sa_email() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d.get("client_email") and d.get("private_key"); print(d["client_email"])' "$1" 2>/dev/null; }
+  if [ -n "${GOOGLE_SERVICE_ACCOUNT_FILE:-}" ] && [ -n "$(sa_email "${GOOGLE_SERVICE_ACCOUNT_FILE/#\~/$HOME}")" ]; then
+    ok "service account key already in the file ($(sa_email "${GOOGLE_SERVICE_ACCOUNT_FILE/#\~/$HOME}"))"
+  elif [ "$YES" = 1 ]; then
+    bad "GOOGLE_SERVICE_ACCOUNT_FILE is missing or unreadable in $SECRETS_FILE and --yes cannot ask for it; add it and run again"; return 1
+  else
+    while :; do
+      say "  Paste the JSON key now and finish with a line containing only }  (or type a path to the file):"
+      local buf="" line first=1 path=""
+      while IFS= read -rs line; do
+        if [ "$first" = 1 ]; then
+          first=0
+          [ -n "$line" ] || break
+          case "$line" in /*|~*) path="${line/#\~/$HOME}"; break;; esac
+        fi
+        buf+="$line"$'\n'
+        [ "$line" = "}" ] && break
+      done
+      echo
+      if [ -n "$path" ]; then
+        if [ -n "$(sa_email "$path")" ]; then put GOOGLE_SERVICE_ACCOUNT_FILE "$path"; ok "service account $(sa_email "$path") from $path; share the Drive folder with that address"; break; fi
+        say "     ${Y}$path is not a readable service account key${N}; paste the key's content or another path"; continue
       fi
-      buf+="$line"$'\n'
-      [ "$line" = "}" ] && break
+      [ -n "$buf" ] || { say "     ${Y}the key is needed${N}: open the downloaded JSON file and paste everything from { to }"; continue; }
+      if printf '%s' "$buf" > "$sa_file.tmp" && [ -n "$(sa_email "$sa_file.tmp")" ]; then
+        mv "$sa_file.tmp" "$sa_file" && chmod 600 "$sa_file" && put GOOGLE_SERVICE_ACCOUNT_FILE "$sa_file"
+        ok "service account key saved to $sa_file ($(sa_email "$sa_file")); share the Drive folder with that address"; break
+      fi
+      rm -f "$sa_file.tmp"; say "     ${Y}that was not a service account key${N} (expected JSON with client_email and private_key); paste it again"
     done
-    echo
-    if [ -n "$buf" ]; then
-      if printf '%s' "$buf" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("client_email") and d.get("private_key")' 2>/dev/null; then
-        printf '%s' "$buf" > "$sa_file" && chmod 600 "$sa_file" && put GOOGLE_SERVICE_ACCOUNT_FILE "$sa_file"
-        ok "service account key saved to $sa_file ($(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["client_email"])' "$sa_file")); share the Drive folder with that address"
-      else
-        warn "that was not a service account key (expected JSON with client_email and private_key); skipped, rerun with: scripts/setup.sh --step 5"
-      fi
-    fi
   fi
-  if [ -n "${GOOGLE_DOCS_FOLDER_ID:-}" ]; then ok "GOOGLE_DOCS_FOLDER_ID already in the file"; else ask v "Drive folder id (Enter to skip)" ""; [ -n "$v" ] && put GOOGLE_DOCS_FOLDER_ID "$v"; fi
+  if [ -n "${GOOGLE_DOCS_FOLDER_ID:-}" ]; then ok "GOOGLE_DOCS_FOLDER_ID already in the file"
+  elif [ "$YES" = 1 ]; then bad "GOOGLE_DOCS_FOLDER_ID is missing in $SECRETS_FILE and --yes cannot ask for it; add it and run again"; return 1
+  else
+    while :; do
+      read -r -p "  Drive folder id (the part of the folder URL after /folders/; the whole URL is fine too): " v
+      v="${v##*/folders/}"; v="${v%%[?#]*}"; v="${v// /}"
+      [ -n "$v" ] || { say "     ${Y}the folder id is needed${N}: open the shared folder in Google Drive and copy its URL"; continue; }
+      [[ "$v" =~ ^[A-Za-z0-9_-]{10,}$ ]] || { say "     ${Y}that does not look like a folder id${N} (letters, digits, - and _); try again"; continue; }
+      put GOOGLE_DOCS_FOLDER_ID "$v"; GOOGLE_DOCS_FOLDER_ID="$v"; ok "GOOGLE_DOCS_FOLDER_ID saved to $SECRETS_FILE"; break
+    done
+  fi
   if [ "${PROFILE:-}" = remote ]; then
     say ""; say "  ${B}Remote model keys${N} for the endpoints of step 2."
-    for k in LLM_API_KEY STT_API_KEY EMBEDDINGS_API_KEY; do if [ -n "${!k:-}" ]; then ok "$k already in the file"; else ask_secret v "$k"; [ -n "$v" ] && put "$k" "$v"; fi; done
+    for k in LLM_API_KEY STT_API_KEY EMBEDDINGS_API_KEY; do need_key "$k" "$k" || return 1; done
   fi
   say ""; say "  keys present in $SECRETS_FILE:"; grep -v '^#' "$SECRETS_FILE" | grep -v '=$' | grep -v '^$' | sed 's/=.*/=<set>/' | sed 's/^/     /'
   note "edit the file at any time with: nano $SECRETS_FILE ; the deploy step (6) applies it. Changed a key later? scripts/setup.sh --step 5 then --step 6."
@@ -401,9 +432,11 @@ step5() {
     note "creating the secrets in $PROJECT from the file (passwords are generated)"
     NAMESPACE="$PROJECT" SECRETS_FILE="$SECRETS_FILE" "$ROOT/scripts/create-secrets.sh" | sed 's/^/  /' || return 1
   fi
+  local missing=0
   for key in SLACK_BOT_TOKEN TAVUS_API_KEY GOOGLE_SERVICE_ACCOUNT_JSON GOOGLE_DOCS_FOLDER_ID; do
-    if [ -n "$(oc get secret assistant-integrations -n "$PROJECT" -o jsonpath="{.data.$key}" 2>/dev/null)" ]; then ok "$key in the cluster"; else warn "$key empty (feature off)"; fi
+    if [ -n "$(oc get secret assistant-integrations -n "$PROJECT" -o jsonpath="{.data.$key}" 2>/dev/null)" ]; then ok "$key in the cluster"; else bad "$key empty in the cluster; run scripts/setup.sh --step 5 again"; missing=1; fi
   done
+  [ "$missing" = 0 ] || return 1
   mark 5
 }
 step6() {

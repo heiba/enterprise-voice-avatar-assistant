@@ -123,14 +123,18 @@ run later.
 The only step that needs you in a browser, on your laptop. It creates `~/secrets.env` from
 `secrets.env.example` on the first run, prints what to create for each integration, asks for
 the values with hidden input, writes them into the file, and creates or refreshes the
-secrets in the project with `scripts/create-secrets.sh`. Values already in the file are not
-asked again.
+secrets in the project with `scripts/create-secrets.sh`. Every value is required: an empty
+answer or one of the wrong shape (a Slack token that does not start with `xoxb-`, a pasted
+key that is not a service account JSON, a folder id with other characters) is asked again,
+nothing can be skipped. Values already in the file are not asked again, so a run interrupted
+here continues where it stopped. With `--yes` nothing is asked and every value must already
+be in the file.
 
 | Integration | What to create | What the step asks |
 |---|---|---|
 | Slack | An app from `n8n/slack-app-manifest.json` with `N8N_HOST` replaced by the n8n host the step prints; install it to the workspace; the five channels with the app invited | The Bot User OAuth Token (`xoxb-…`) |
 | Tavus | An API key in the developer settings | The key |
-| Google Docs | A Google Cloud project with the Drive API enabled, a service account without roles, a JSON key for it; a Drive folder shared with the service account's e-mail as Editor | The key file's content, pasted into the terminal and finished with a line containing only `}` (a path to the file also works); then the folder id, the part of the folder URL after `/folders/` |
+| Google Docs | A Google Cloud project with the Drive API enabled, a service account without roles, a JSON key for it; a Drive folder shared with the service account's e-mail as Editor | The key file's content, pasted into the terminal and finished with a line containing only `}` (a path to the file also works); then the folder id, or the folder's whole URL, from which the id is taken |
 | Remote models (profile `remote` only) | Nothing | `LLM_API_KEY`, `STT_API_KEY`, `EMBEDDINGS_API_KEY` |
 
 The pasted key is validated (it must contain `client_email` and `private_key`), saved to

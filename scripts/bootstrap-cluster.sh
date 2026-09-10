@@ -197,7 +197,8 @@ else
   else
     ok "GPU memory share ${current:-0.9} needs no change"
   fi
-  info "GPU memory now: $(oc exec -n nvidia-gpu-operator "$(oc get pods -n nvidia-gpu-operator -l app=nvidia-driver-daemonset -o jsonpath='{.items[0].metadata.name}')" -- nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader 2>/dev/null || echo 'nvidia-smi unavailable')"
+  gpu_mem() { local pod; pod=$(oc get pods -n nvidia-gpu-operator -o name 2>/dev/null | grep -m1 'driver-daemonset'); [ -n "$pod" ] && oc exec -n nvidia-gpu-operator "$pod" -- nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader 2>/dev/null; }
+  info "GPU memory now: $(gpu_mem || echo 'not readable (no driver pod found)')"
 fi
 
 step "Argo CD"

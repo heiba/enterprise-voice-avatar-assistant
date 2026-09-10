@@ -112,7 +112,7 @@ Everything below is optional; the assistant runs without any of it. Keys go into
 | `assistant-qdrant` | `QDRANT_API_KEY` |
 | `assistant-livekit` | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` |
 | `assistant-models` | `LLM_API_KEY`, `STT_API_KEY`, `TTS_API_KEY`, `EMBEDDINGS_API_KEY`, `GUARDRAILS_API_KEY`, `HF_TOKEN` |
-| `assistant-integrations` | `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `TAVUS_API_KEY`, `TAVUS_FACE_ID`, `TAVUS_PAL_ID`, `SIMLI_API_KEY`, `SIMLI_FACE_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_DOCS_FOLDER_ID` |
+| `assistant-integrations` | `SLACK_BOT_TOKEN`, `TAVUS_API_KEY`, `TAVUS_FACE_ID`, `TAVUS_PAL_ID`, `SIMLI_API_KEY`, `SIMLI_FACE_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_DOCS_FOLDER_ID` |
 
 Read a value, for example the MinIO console login:
 

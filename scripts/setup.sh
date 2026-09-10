@@ -326,10 +326,9 @@ step5() {
   say ""
   say "  ${B}Slack${N} (approval cards and notifications). On your laptop: https://api.slack.com/apps > Create New App > From a manifest;"
   say "  paste n8n/slack-app-manifest.json with N8N_HOST replaced by $n8n_host, install the app to the workspace,"
-  say "  copy the Bot User OAuth Token (xoxb-…) and, under Basic Information, the Signing Secret. Create the channels"
+  say "  copy the Bot User OAuth Token (xoxb-…). Create the channels"
   say "  #assistant-ingestion #assistant-documents #assistant-approvals #assistant-tickets #assistant-knowledge-gaps and invite the app to each."
   if [ -n "${SLACK_BOT_TOKEN:-}" ]; then ok "SLACK_BOT_TOKEN already in the file"; else ask_secret v "Bot User OAuth Token"; [ -n "$v" ] && put SLACK_BOT_TOKEN "$v"; fi
-  if [ -n "${SLACK_SIGNING_SECRET:-}" ]; then ok "SLACK_SIGNING_SECRET already in the file"; else ask_secret v "Signing Secret"; [ -n "$v" ] && put SLACK_SIGNING_SECRET "$v"; fi
   say ""
   say "  ${B}Tavus${N} (avatar video). On your laptop: https://platform.tavus.io > developer settings > API key. Free plan: 25 minutes a month, one stream."
   if [ -n "${TAVUS_API_KEY:-}" ]; then ok "TAVUS_API_KEY already in the file"; else ask_secret v "Tavus API key"; [ -n "$v" ] && put TAVUS_API_KEY "$v"; fi

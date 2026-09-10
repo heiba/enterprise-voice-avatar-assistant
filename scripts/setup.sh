@@ -138,7 +138,7 @@ discover() {
   ARGO_READY=$([ "$(oc get deployment openshift-gitops-server -n openshift-gitops -o jsonpath='{.status.readyReplicas}' 2>/dev/null)" = "1" ] && echo yes || echo no)
   TURN_SECRET=$(oc get secret livekit-turn-tls -n "$PROJECT" >/dev/null 2>&1 && echo yes || echo no)
   SECRETS_IN_CLUSTER=$(oc get secret assistant-integrations -n "$PROJECT" >/dev/null 2>&1 && echo yes || echo no)
-  APP_STATE=$(oc get application voice-avatar-assistant -n openshift-gitops -o jsonpath='{.status.sync.status}/{.status.health.status}' 2>/dev/null)
+  APP_STATE=$(oc get applications.argoproj.io voice-avatar-assistant -n openshift-gitops -o jsonpath='{.status.sync.status}/{.status.health.status}' 2>/dev/null)
   ISVC_TOTAL=$(oc get isvc -n "$PROJECT" --no-headers 2>/dev/null | wc -l | tr -d ' ')
   ISVC_READY=$(oc get isvc -n "$PROJECT" -o json 2>/dev/null | jq '[.items[] | select(.status.conditions[]? | select(.type=="Ready" and .status=="True"))] | length')
   PODS_NOT_READY=$(oc get pods -n "$PROJECT" --no-headers 2>/dev/null | grep -v -E 'Running|Completed' | wc -l | tr -d ' ')

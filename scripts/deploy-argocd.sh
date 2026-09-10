@@ -88,15 +88,21 @@ done
 
 step "Argo CD application"
 run oc apply -f "$ROOT/deploy/argocd/appproject.yaml" >/dev/null
-oc patch appproject "$APP" -n openshift-gitops --type merge -p "{\"spec\":{\"sourceRepos\":[\"$REPO_URL\"],\"destinations\":[{\"server\":\"https://kubernetes.default.svc\",\"namespace\":\"$PROJECT\"}]}}" >/dev/null && ok "AppProject allows $REPO_URL -> $PROJECT"
+oc patch appprojects.argoproj.io "$APP" -n openshift-gitops --type merge -p "{\"spec\":{\"sourceRepos\":[\"$REPO_URL\"],\"destinations\":[{\"server\":\"https://kubernetes.default.svc\",\"namespace\":\"$PROJECT\"}]}}" >/dev/null && ok "AppProject allows $REPO_URL -> $PROJECT"
 run oc apply -f "$ROOT/deploy/argocd/application.yaml" >/dev/null
-oc patch application "$APP" -n openshift-gitops --type merge -p "{\"spec\":{\"source\":{\"repoURL\":\"$REPO_URL\",\"targetRevision\":\"$TARGET_REVISION\",\"helm\":{\"valueFiles\":[\"values.yaml\",\"$VALUES_FILE\"],\"valuesObject\":$VALUES_OBJECT,\"parameters\":[{\"name\":\"global.domain\",\"value\":\"$DOMAIN\"},{\"name\":\"models.llm.endpoint\",\"value\":\"$LLM_ENDPOINT\"},{\"name\":\"models.llm.servedModelName\",\"value\":\"$LLM_MODEL\"}]}},\"destination\":{\"namespace\":\"$PROJECT\"}}}" >/dev/null \
+oc patch applications.argoproj.io "$APP" -n openshift-gitops --type merge -p "{\"spec\":{\"source\":{\"repoURL\":\"$REPO_URL\",\"targetRevision\":\"$TARGET_REVISION\",\"helm\":{\"valueFiles\":[\"values.yaml\",\"$VALUES_FILE\"],\"valuesObject\":$VALUES_OBJECT,\"parameters\":[{\"name\":\"global.domain\",\"value\":\"$DOMAIN\"},{\"name\":\"models.llm.endpoint\",\"value\":\"$LLM_ENDPOINT\"},{\"name\":\"models.llm.servedModelName\",\"value\":\"$LLM_MODEL\"}]}},\"destination\":{\"namespace\":\"$PROJECT\"}}}" >/dev/null \
   && ok "Application $APP: $REPO_URL@$TARGET_REVISION, values $VALUES_FILE, global.domain=$DOMAIN, llm $LLM_MODEL at $LLM_ENDPOINT"
-oc annotate application "$APP" -n openshift-gitops argocd.argoproj.io/refresh=normal --overwrite >/dev/null
+oc annotate applications.argoproj.io "$APP" -n openshift-gitops argocd.argoproj.io/refresh=normal --overwrite >/dev/null
+# Routes are immutable in their host: any route created earlier with a different host (for
+# example by a sync that ran before the domain was set) is removed so Argo CD recreates it
+for r in $(oc get routes -n "$PROJECT" -o json 2>/dev/null | jq -r --arg ns "$PROJECT" --arg d "$DOMAIN" '.items[] | select(.spec.host != "\(.metadata.name)-\($ns).\($d)") | .metadata.name'); do
+  warn "route $r has host $(oc get route "$r" -n "$PROJECT" -o jsonpath='{.spec.host}'), not the one for this domain; deleting it so Argo CD recreates it"
+  oc delete route "$r" -n "$PROJECT" --wait=false >/dev/null
+done
 [ "${WAIT:-1}" = "1" ] || { echo "Application registered (WAIT=0)."; exit 0; }
 
 step "Sync"
-app_status() { oc get application "$APP" -n openshift-gitops -o jsonpath='{.status.sync.status}/{.status.health.status}' 2>/dev/null; }
+app_status() { oc get applications.argoproj.io "$APP" -n openshift-gitops -o jsonpath='{.status.sync.status}/{.status.health.status}' 2>/dev/null; }
 synced() { [ "$(app_status)" = "Synced/Healthy" ]; }
 waited=0
 until synced; do
@@ -104,11 +110,11 @@ until synced; do
   sleep 20; waited=$((waited + 20))
   if [ $((waited % 40)) -eq 0 ]; then
     info "application $(app_status) after ${waited}s; pods not ready: $(oc get pods -n "$PROJECT" --no-headers 2>/dev/null | grep -v -E 'Running|Completed' | awk '{print $1":"$3}' | tr '\n' ' ')"
-    oc get application "$APP" -n openshift-gitops -o json | jq -r '.status.resources[]? | select(.health.status != null and .health.status != "Healthy") | "     \(.kind)/\(.name): \(.health.status) \(.health.message // "")"' | head -8
-    [ "$(oc get application "$APP" -n openshift-gitops -o jsonpath='{.status.operationState.phase}')" = "Error" ] && oc get application "$APP" -n openshift-gitops -o jsonpath='{.status.operationState.message}{"\n"}' | cut -c1-300 | sed 's/^/     /'
+    oc get applications.argoproj.io "$APP" -n openshift-gitops -o json | jq -r '.status.resources[]? | select(.health.status != null and .health.status != "Healthy") | "     \(.kind)/\(.name): \(.health.status) \(.health.message // "")"' | head -8
+    [ "$(oc get applications.argoproj.io "$APP" -n openshift-gitops -o jsonpath='{.status.operationState.phase}')" = "Error" ] && oc get applications.argoproj.io "$APP" -n openshift-gitops -o jsonpath='{.status.operationState.message}{"\n"}' | cut -c1-300 | sed 's/^/     /'
   fi
 done
-if synced; then ok "application Synced/Healthy"; else fail "application is $(app_status) after 30 min"; debug "oc describe application $APP -n openshift-gitops | tail -40; Argo CD UI: https://$(oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}')"; fi
+if synced; then ok "application Synced/Healthy"; else fail "application is $(app_status) after 30 min"; debug "oc describe applications.argoproj.io $APP -n openshift-gitops | tail -40; Argo CD UI: https://$(oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}')"; fi
 
 step "Models"
 if oc get isvc -n "$PROJECT" -o name 2>/dev/null | grep -q .; then

@@ -31,16 +31,16 @@ voiceAgent:
     - id: rf6b1c8d5e9d
       name: Samantha
       gender: female
-  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-voice-agent:sha-f8f1ee2
+  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-voice-agent:sha-2f926ec
 frontend:
   enabled: true
-  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-frontend:sha-f8f1ee2
+  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-frontend:sha-2f926ec
 ragApi:
   enabled: true
-  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-rag-api:sha-f8f1ee2
+  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-rag-api:sha-2f926ec
 ingestion:
   enabled: true
-  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-ingestion:sha-f8f1ee2
+  image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-ingestion:sha-2f926ec
 
 # One L4 shared by three vLLM servers through GPU time-slicing (scripts/bootstrap-cluster.sh,
 # GPU_SLICES=4 advertises the card as four nvidia.com/gpu). Each server gets a fixed share of

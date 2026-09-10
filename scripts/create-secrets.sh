@@ -52,8 +52,9 @@ make_secret() {
     echo "keep    ${name} (already exists; REFRESH=${name} rewrites it, FORCE=1 rewrites all)"
     return
   fi
+  local verb=created; oc get secret "${name}" -n "${NS}" >/dev/null 2>&1 && verb="rewrote"
   oc create secret generic "${name}" -n "${NS}" "$@" --dry-run=client -o yaml | oc apply -f - >/dev/null
-  echo "created ${name}"
+  echo "${verb} ${name}"
 }
 
 oc get namespace "${NS}" >/dev/null

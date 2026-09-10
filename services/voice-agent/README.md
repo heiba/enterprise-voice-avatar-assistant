@@ -18,7 +18,9 @@ the LiveKit server and joins every new room. For each user turn:
 | Variable | Default | Notes |
 |---|---|---|
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | dev defaults | LiveKit server |
-| `RAG_API_URL` | `http://rag-api:8080` | answers come from `/v1/chat` with `mode=voice` |
+| `RAG_API_URL` | `http://rag-api:8080` | answers come from `/v1/chat/stream` with `mode=voice`, spoken sentence by sentence while generated (`/v1/chat` when `RAG_STREAM=false` or a guardrail provider is set) |
+| `RAG_STREAM`, `GUARDRAILS_PROVIDER` | `true`, `none` | streaming is off when an output guardrail exists, since its verdict needs the whole answer |
+| `PREEMPTIVE_GENERATION`, `MIN_ENDPOINTING_DELAY` | `true`, `0.4` | start answering on the interim transcript; silence before a turn ends |
 | `STT_BASE_URL`, `STT_MODEL`, `STT_API_KEY`, `STT_LANGUAGE` | Whisper defaults | OpenAI-compatible transcription |
 | `TTS_PROVIDER` | `openai` | `openai` (any OpenAI-compatible speech API, Kokoro in the chart) or `elevenlabs` |
 | `TTS_BASE_URL`, `TTS_MODEL`, `TTS_VOICE`, `TTS_SPEED` | Kokoro defaults | |
@@ -30,7 +32,7 @@ the LiveKit server and joins every new room. For each user turn:
 | `AVATAR_FACES` | `[]` | JSON list of `{id, name, gender\|voice}`; the browser's choice arrives as the participant attribute `avatar_face` |
 | `HEDRA_API_KEY`, `HEDRA_AVATAR_IMAGE` | unset | Hedra avatar |
 | `SERVICE_CA_FILE` | unset | extra CA for in-cluster TLS endpoints |
-| `GREETING`, `GREETING_NAMED`, `MIN_ENDPOINTING_DELAY` | see `app/config.py` | `GREETING_NAMED` takes `{name}`, the first name from the token's display name |
+| `GREETING`, `GREETING_NAMED` | see `app/config.py` | `GREETING_NAMED` takes `{name}`, the first name from the token's display name |
 | `AGENT_PORT` | `8081` | health endpoint of the worker |
 
 ## Run locally

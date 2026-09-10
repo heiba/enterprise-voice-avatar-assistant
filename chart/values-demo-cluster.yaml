@@ -72,6 +72,14 @@ models:
   tts:
     # Bright female Kokoro voice for the default face (af_bella, grade A-; af_heart is warmer).
     voice: af_bella
+    # Kokoro runs on CPU; the node has 32 vCPU, and more cores shorten the first sentence.
+    resources:
+      requests:
+        cpu: "2"
+        memory: 2Gi
+      limits:
+        cpu: "8"
+        memory: 4Gi
 
 # Qdrant dashboard for the demo (protected by the API key from assistant-qdrant).
 qdrant:

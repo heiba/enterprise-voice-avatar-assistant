@@ -60,3 +60,15 @@ def test_citations_payload_carries_ticket():
         helpers.citations_payload({"session_id": "s", "answer": "filed", "ticket": {"ticket_ref": "REQ-1"}})
     )
     assert data["ticket"] == {"ticket_ref": "REQ-1"} and data["question"] == ""
+
+
+def test_sentence_buffer_speaks_whole_sentences_without_markers():
+    buf = helpers.SentenceBuffer()
+    assert buf.feed("Administrator passwords are rotated every 90 days [1") == []
+    assert buf.feed("][2]. Normal users every") == ["Administrator passwords are rotated every 90 days. "]
+    assert buf.feed(" 180 days") == []
+    assert buf.flush() == "Normal users every 180 days"
+    assert buf.flush() == ""
+    buf = helpers.SentenceBuffer()
+    assert buf.feed("**Yes.** It is 14 characters!\nSee the policy.") == ["Yes. ", "It is 14 characters! "]
+    assert buf.flush() == "See the policy."

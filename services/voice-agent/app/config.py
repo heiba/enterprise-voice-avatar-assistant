@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     rag_timeout_seconds: float = 90.0
     # How often the agent asks the RAG API for outcome notices (ticket decisions) to speak
     notification_poll_seconds: float = 3.0
+    # Speak while the RAG API is still generating (POST /v1/chat/stream). Off when an output
+    # guardrail is configured, since the verdict only exists once the answer is complete.
+    rag_stream: bool = True
+    guardrails_provider: str = "none"
 
     # Speech to text (OpenAI-compatible transcription endpoint, Whisper on vLLM)
     stt_base_url: str = "http://localhost:8000/v1"
@@ -79,7 +83,9 @@ class Settings(BaseSettings):
         "You are a helpful voice assistant for employees. Keep answers short and natural to listen to."
     )
     # Seconds of silence before a user turn is considered finished
-    min_endpointing_delay: float = 0.5
+    min_endpointing_delay: float = 0.4
+    # Start the answer on the interim transcript before the turn is final (saves a few hundred ms)
+    preemptive_generation: bool = True
     log_level: str = "INFO"
 
 

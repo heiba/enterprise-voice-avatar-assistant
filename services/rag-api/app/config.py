@@ -29,7 +29,8 @@ class Settings(BaseSettings):
     llm_api_key: str = "none"
     llm_temperature: float = 0.2
     answer_max_tokens: int = 700
-    voice_max_tokens: int = 220
+    # Spoken answers stay short: two or three sentences (see VOICE_STYLE); halves generation time on a small GPU
+    voice_max_tokens: int = 120
 
     embeddings_base_url: str = "http://localhost:8081/v1"
     embeddings_model: str = "bge-m3"

@@ -3,7 +3,9 @@
 import logging
 import re
 import uuid
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
 from . import clients, guardrails, intent, knowledge_gaps, memory, retrieval, tickets
 from .config import VOICE_STYLE, settings
@@ -123,7 +125,19 @@ def file_request(request: ChatRequest, session_id: str, info: GuardrailInfo) -> 
     )
 
 
-def answer(request: ChatRequest) -> ChatResponse:
+@dataclass
+class Prepared:
+    """A question that passed the input guardrail, with its context ready for the model."""
+
+    session_id: str
+    info: GuardrailInfo
+    hits: list[Hit]
+    messages: list[dict[str, str]]
+    max_tokens: int
+
+
+def _prepare(request: ChatRequest) -> ChatResponse | Prepared:
+    """Guardrail, intent and retrieval; returns a finished reply for blocked messages and requests."""
     session_id = request.session_id or uuid.uuid4().hex
     memory.ensure_conversation(session_id, request.user_id, request.mode)
     info = GuardrailInfo(provider=settings.guardrails_provider)
@@ -158,32 +172,68 @@ def answer(request: ChatRequest) -> ChatResponse:
 
     user_memory = memory.get_user_memory(request.user_id) if request.user_id else {}
     messages = build_messages(request.message, hits, history, request.mode, user_memory, request.user_name)
+    max_tokens = settings.voice_max_tokens if request.mode == "voice" else settings.answer_max_tokens
+    return Prepared(session_id, info, hits, messages, max_tokens)
 
-    completion = clients.llm().chat.completions.create(
-        model=settings.llm_model,
-        messages=messages,
-        temperature=settings.llm_temperature,
-        max_tokens=settings.voice_max_tokens if request.mode == "voice" else settings.answer_max_tokens,
-    )
-    text = (completion.choices[0].message.content or "").strip()
 
+def _finish(request: ChatRequest, prep: Prepared, text: str) -> ChatResponse:
+    """Output guardrail, citations and memory for a generated answer."""
     blocked = False
     out = guardrails.check_output(request.message, text)
     if not out.allowed:
-        info.output_flagged, info.category = True, out.category
+        prep.info.output_flagged, prep.info.category = True, out.category
         text, blocked = settings.blocked_message, True
 
-    used = cited_numbers(text, len(hits))
-    citations: list[Citation] = [hit.to_citation(n, used=n in used) for n, hit in enumerate(hits, start=1)]
+    used = cited_numbers(text, len(prep.hits))
+    citations: list[Citation] = [
+        hit.to_citation(n, used=n in used) for n, hit in enumerate(prep.hits, start=1)
+    ]
 
-    memory.append(session_id, "user", request.message)
-    memory.append(session_id, "assistant", text, citations=citations, blocked=blocked)
-    log.info("session=%s hits=%d cited=%s blocked=%s", session_id, len(hits), sorted(used), blocked)
+    memory.append(prep.session_id, "user", request.message)
+    memory.append(prep.session_id, "assistant", text, citations=citations, blocked=blocked)
+    log.info("session=%s hits=%d cited=%s blocked=%s", prep.session_id, len(prep.hits), sorted(used), blocked)
     return ChatResponse(
-        session_id=session_id,
+        session_id=prep.session_id,
         answer=text,
         citations=citations,
         blocked=blocked,
-        guardrail=info,
+        guardrail=prep.info,
         model=settings.llm_model,
     )
+
+
+def answer(request: ChatRequest) -> ChatResponse:
+    prep = _prepare(request)
+    if isinstance(prep, ChatResponse):
+        return prep
+    completion = clients.llm().chat.completions.create(
+        model=settings.llm_model,
+        messages=prep.messages,
+        temperature=settings.llm_temperature,
+        max_tokens=prep.max_tokens,
+    )
+    return _finish(request, prep, (completion.choices[0].message.content or "").strip())
+
+
+def answer_stream(request: ChatRequest) -> Iterator[tuple[str, str | ChatResponse]]:
+    """The same answer as `answer`, handed out while it is generated: ("delta", text) pieces,
+    then ("final", ChatResponse) once the output guardrail, citations and memory are settled.
+    Blocked messages and service requests produce only the final."""
+    prep = _prepare(request)
+    if isinstance(prep, ChatResponse):
+        yield "final", prep
+        return
+    parts: list[str] = []
+    stream = clients.llm().chat.completions.create(
+        model=settings.llm_model,
+        messages=prep.messages,
+        temperature=settings.llm_temperature,
+        max_tokens=prep.max_tokens,
+        stream=True,
+    )
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content if getattr(chunk, "choices", None) else None
+        if delta:
+            parts.append(delta)
+            yield "delta", delta
+    yield "final", _finish(request, prep, "".join(parts).strip())

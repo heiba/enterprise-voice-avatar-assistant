@@ -2,6 +2,7 @@
 
 GET  /healthz, /readyz
 POST /v1/chat                       grounded answer with citations, memory, guardrails (text or voice mode)
+POST /v1/chat/stream                the same answer as newline-delimited JSON while it is generated
 POST /v1/search                     retrieval only
 GET  /v1/sessions/{id}/messages     conversation history
 POST /v1/sessions/{id}/archive       trigger the transcript archival workflow (WF5)
@@ -21,6 +22,7 @@ GET  /v1/info                       active models and providers (for the diagnos
 """
 
 import asyncio
+import json
 import logging
 import threading
 import uuid
@@ -28,7 +30,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 
 from . import classify, clients, faces, knowledge_gaps, memory, notifications, rag, retrieval, tickets, voice
 from .config import settings
@@ -132,6 +134,22 @@ def info():
 @app.post("/v1/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     return await asyncio.to_thread(rag.answer, request)
+
+
+@app.post("/v1/chat/stream")
+def chat_stream(request: ChatRequest):
+    """The answer as newline-delimited JSON while it is generated: {"type": "delta", "text": ...}
+    lines, then one {"type": "final", ...ChatResponse}. The voice agent starts speaking on the
+    first sentence instead of waiting for the whole answer."""
+
+    def lines():
+        for kind, payload in rag.answer_stream(request):
+            if kind == "delta":
+                yield json.dumps({"type": "delta", "text": payload}) + "\n"
+            else:
+                yield json.dumps({"type": "final", **payload.model_dump()}) + "\n"
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson")
 
 
 @app.post("/v1/search", response_model=SearchResponse)

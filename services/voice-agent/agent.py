@@ -11,7 +11,9 @@ Run:  python agent.py start        (worker registers with LiveKit and joins new 
 
 import asyncio
 import logging
+import time
 
+import httpx
 import openai as openai_sdk
 from livekit import rtc
 from livekit.agents import Agent, AgentSession, JobContext, JobProcess, RoomOutputOptions, WorkerOptions, cli
@@ -22,6 +24,12 @@ from app.config import settings
 from app.tls import async_http_client
 
 log = logging.getLogger("voice-agent")
+# Streaming is switched off for the life of the worker when the RAG API has no streaming endpoint
+_STREAM = {"enabled": True}
+
+
+def streaming_enabled() -> bool:
+    return _STREAM["enabled"] and settings.rag_stream and settings.guardrails_provider.lower() == "none"
 
 
 def build_stt():
@@ -72,10 +80,30 @@ class Assistant(Agent):
         self._user_name = user_name
 
     async def llm_node(self, chat_ctx, tools, model_settings):
-        """Replace the LLM step with a call to the RAG API so voice and text share one answer path."""
+        """Replace the LLM step with a call to the RAG API so voice and text share one answer path.
+        With streaming, speech starts on the first complete sentence while the rest is generated."""
         text = helpers.last_user_text(chat_ctx)
         if not text:
             return
+        started = time.monotonic()
+        if streaming_enabled():
+            spoken = {"any": False}
+            try:
+                async for piece in self._stream(text, started, spoken):
+                    yield piece
+                return
+            except httpx.HTTPStatusError as exc:
+                log.warning(
+                    "RAG API has no streaming endpoint (%s); whole answers from now on",
+                    exc.response.status_code,
+                )
+                _STREAM["enabled"] = False
+            except Exception:
+                log.exception("streamed RAG API call failed for session %s", self._session_id)
+                if spoken["any"]:
+                    return
+                yield "Sorry, I could not reach the knowledge base just now. Please try again in a moment."
+                return
         try:
             reply = await rag_client.chat(text, self._session_id, self._user_id, self._user_name)
         except Exception:
@@ -84,8 +112,47 @@ class Assistant(Agent):
             return
         await self._publish(reply, text)
         answer = helpers.speakable(reply.get("answer", ""))
-        log.info("session=%s blocked=%s answer=%r", self._session_id, reply.get("blocked"), answer[:80])
+        log.info(
+            "session=%s blocked=%s answer=%r (%.2fs)",
+            self._session_id,
+            reply.get("blocked"),
+            answer[:80],
+            time.monotonic() - started,
+        )
         yield answer
+
+    async def _stream(self, text: str, started: float, spoken: dict):
+        buffer = helpers.SentenceBuffer()
+        reply = None
+        first: float | None = None
+        async for kind, payload in rag_client.chat_stream(
+            text, self._session_id, self._user_id, self._user_name
+        ):
+            if kind == "delta":
+                if first is None:
+                    first = time.monotonic()
+                    log.info("session=%s first token after %.2fs", self._session_id, first - started)
+                for sentence in buffer.feed(payload):
+                    spoken["any"] = True
+                    yield sentence
+            else:
+                reply = payload
+        tail = buffer.flush()
+        if tail:
+            spoken["any"] = True
+            yield tail
+        if reply is None:
+            raise RuntimeError("the RAG API stream ended without a final message")
+        if not spoken["any"]:  # a service request or a blocked message arrives as the final only
+            yield helpers.speakable(reply.get("answer", ""))
+        await self._publish(reply, text)
+        log.info(
+            "session=%s blocked=%s answer=%r (streamed, %.2fs)",
+            self._session_id,
+            reply.get("blocked"),
+            str(reply.get("answer", ""))[:80],
+            time.monotonic() - started,
+        )
 
     async def _publish(self, reply: dict, question: str) -> None:
         try:
@@ -122,7 +189,10 @@ async def entrypoint(ctx: JobContext) -> None:
         tts=build_tts(face),
         llm=build_llm(),
         allow_interruptions=True,
-        min_endpointing_delay=settings.min_endpointing_delay,
+        turn_handling={
+            "endpointing": {"min_delay": settings.min_endpointing_delay},
+            "preemptive_generation": {"enabled": settings.preemptive_generation},
+        },
     )
     try:
         avatar = await asyncio.wait_for(
@@ -160,6 +230,25 @@ async def entrypoint(ctx: JobContext) -> None:
         room=ctx.room,
         room_output_options=RoomOutputOptions(audio_enabled=avatar is None),
     )
+    # Turn latency in the log: from the end of the person's speech to the first spoken audio
+    turn = {"end_of_speech": None}
+
+    @session.on("user_state_changed")
+    def _on_user_state(ev) -> None:
+        if getattr(ev, "old_state", None) == "speaking" and getattr(ev, "new_state", None) == "listening":
+            turn["end_of_speech"] = time.monotonic()
+
+    @session.on("agent_state_changed")
+    def _on_agent_state(ev) -> None:
+        if getattr(ev, "new_state", None) == "speaking" and turn["end_of_speech"]:
+            log.info(
+                "latency: end of speech to first audio %.2fs (session %s, streaming=%s)",
+                time.monotonic() - turn["end_of_speech"],
+                session_id,
+                streaming_enabled(),
+            )
+            turn["end_of_speech"] = None
+
     greeting = helpers.greeting_for(user_name, settings.greeting, settings.greeting_named)
     if greeting:
         try:

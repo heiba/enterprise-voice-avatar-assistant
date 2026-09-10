@@ -10,6 +10,8 @@ BULLET_RE = re.compile(r"^\s*(?:[-*]|\d+[.)])\s+", re.MULTILINE)
 SPACES_RE = re.compile(r"[ \t]{2,}")
 ROOM_PREFIX = "session-"
 IDENTITY_PREFIX = "user-"
+# a sentence ends at . ! or ?, possibly followed by closing Markdown or a citation marker, then whitespace
+SENTENCE_END_RE = re.compile(r"[.!?][*_`)\]]*\s+")
 
 
 def speakable(text: str) -> str:
@@ -20,6 +22,34 @@ def speakable(text: str) -> str:
     text = SPACES_RE.sub(" ", text)
     text = re.sub(r"\s+([.,;:!?])", r"\1", text)
     return text.strip()
+
+
+class SentenceBuffer:
+    """Turns a token stream into speakable sentences. Text is held back until a sentence ends, so
+    citation markers and Markdown are stripped whole even when they arrive split across chunks."""
+
+    def __init__(self) -> None:
+        self._buffer = ""
+
+    def feed(self, delta: str) -> list[str]:
+        """Add a piece of text; returns the complete sentences it closed, each with a trailing space."""
+        self._buffer += delta
+        sentences: list[str] = []
+        while True:
+            match = SENTENCE_END_RE.search(self._buffer)
+            if not match:
+                break
+            sentence, self._buffer = self._buffer[: match.end()], self._buffer[match.end() :]
+            spoken = speakable(sentence)
+            if spoken:
+                sentences.append(spoken + " ")
+        return sentences
+
+    def flush(self) -> str:
+        """The remaining text, once the stream has ended."""
+        spoken = speakable(self._buffer)
+        self._buffer = ""
+        return spoken
 
 
 def session_id_from_room(room_name: str) -> str:

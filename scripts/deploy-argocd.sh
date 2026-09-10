@@ -103,11 +103,42 @@ done
 
 step "Sync"
 app_status() { oc get applications.argoproj.io "$APP" -n openshift-gitops -o jsonpath='{.status.sync.status}/{.status.health.status}' 2>/dev/null; }
-synced() { [ "$(app_status)" = "Synced/Healthy" ]; }
-waited=0
+op_phase() { oc get applications.argoproj.io "$APP" -n openshift-gitops -o jsonpath='{.status.operationState.phase}' 2>/dev/null; }
+op_message() { oc get applications.argoproj.io "$APP" -n openshift-gitops -o jsonpath='{.status.operationState.message}' 2>/dev/null | cut -c1-300; }
+# Synced/Healthy is not enough: the n8n-setup hook Job runs inside the sync operation, so the
+# operation itself has to have succeeded before the owner account and API key exist.
+synced() { [ "$(app_status)" = "Synced/Healthy" ] && case "$(op_phase)" in ""|Succeeded) true;; *) false;; esac; }
+start_sync() { oc patch applications.argoproj.io "$APP" -n openshift-gitops --type merge -p "{\"operation\":{\"initiatedBy\":{\"username\":\"deploy-argocd.sh\"},\"sync\":{\"revision\":\"$TARGET_REVISION\",\"prune\":true}}}" >/dev/null 2>&1; }
+failing_hook_pod() { oc get pods -n "$PROJECT" -l job-name=n8n-setup --no-headers 2>/dev/null | grep -E 'CrashLoopBackOff|Error' | awk '{print $1}' | head -1; }
+case "$(op_phase)" in
+  Running)
+    hook_pod=$(failing_hook_pod)
+    if [ -n "$hook_pod" ]; then
+      warn "the running sync waits for hook Job n8n-setup, whose pod $hook_pod keeps failing; ending that sync so the latest revision is synced (which recreates the Job)"
+      oc patch applications.argoproj.io "$APP" -n openshift-gitops --type merge -p '{"status":{"operationState":{"phase":"Terminating"}}}' >/dev/null
+      oc delete job n8n-setup -n "$PROJECT" --wait=false >/dev/null 2>&1 || true
+      sleep 20; start_sync
+    fi ;;
+  Failed|Error)
+    warn "the last sync ended with $(op_phase): $(op_message)"
+    info "starting a new sync"
+    oc delete job n8n-setup -n "$PROJECT" --wait=false >/dev/null 2>&1 || true
+    start_sync ;;
+esac
+waited=0; retried=0
 until synced; do
   if [ "$waited" -ge 1800 ]; then break; fi
   sleep 20; waited=$((waited + 20))
+  case "$(op_phase)" in
+    Failed|Error)
+      if [ "$retried" = 0 ]; then
+        warn "sync ended with $(op_phase): $(op_message)"; info "retrying the sync once"
+        oc delete job n8n-setup -n "$PROJECT" --wait=false >/dev/null 2>&1 || true
+        start_sync; retried=1
+      elif [ "$(app_status)" = "Synced/Healthy" ]; then
+        break
+      fi ;;
+  esac
   if [ $((waited % 40)) -eq 0 ]; then
     info "application $(app_status) after ${waited}s; sync operation: $(oc get applications.argoproj.io "$APP" -n openshift-gitops -o jsonpath='{.status.operationState.phase}: {.status.operationState.message}' 2>/dev/null | cut -c1-160)"
     for p in $(oc get pods -n "$PROJECT" --no-headers 2>/dev/null | grep -v -E 'Running|Completed' | awk '{print $1":"$3}'); do
@@ -119,7 +150,11 @@ until synced; do
     [ "$(oc get applications.argoproj.io "$APP" -n openshift-gitops -o jsonpath='{.status.operationState.phase}')" = "Error" ] && oc get applications.argoproj.io "$APP" -n openshift-gitops -o jsonpath='{.status.operationState.message}{"\n"}' | cut -c1-300 | sed 's/^/     /'
   fi
 done
-if synced; then ok "application Synced/Healthy"; else fail "application is $(app_status) after 30 min"; debug "oc describe applications.argoproj.io $APP -n openshift-gitops | tail -40; Argo CD UI: https://$(oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}')"; fi
+if synced; then ok "application Synced/Healthy, sync operation $(op_phase)"; else
+  fail "application is $(app_status), sync operation $(op_phase): $(op_message)"
+  [ -z "$(failing_hook_pod)" ] || { info "hook Job n8n-setup log:"; oc logs -n "$PROJECT" -l job-name=n8n-setup --tail=5 2>/dev/null | sed 's/^/     /'; }
+  debug "oc describe applications.argoproj.io $APP -n openshift-gitops | tail -40; Argo CD UI: https://$(oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}')"
+fi
 
 step "Models"
 if oc get isvc -n "$PROJECT" -o name 2>/dev/null | grep -q .; then

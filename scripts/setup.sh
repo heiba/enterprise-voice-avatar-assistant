@@ -430,7 +430,7 @@ step7() {
     case "$pod" in
       *CrashLoopBackOff*|*Error*)
         bad "job n8n-setup is failing: ${pod}"; oc logs -n "$PROJECT" -l job-name=n8n-setup --tail=3 2>/dev/null | sed 's/^/     /'
-        note "the job restarts by itself after a fix; oc logs -n $PROJECT -l job-name=n8n-setup shows the full log"; return 1 ;;
+        note "oc logs -n $PROJECT -l job-name=n8n-setup shows the full log; after a fix, scripts/setup.sh --step 6 re-syncs and re-runs the job"; return 1 ;;
     esac
     [ $((waited % 60)) -eq 0 ] && note "waiting for job n8n-setup to create the owner account and API key (${waited}s): ${pod}"
     sleep 15; waited=$((waited + 15))

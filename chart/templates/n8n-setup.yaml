@@ -2,7 +2,7 @@
 {{- /*
 First-run setup of n8n without a browser: creates the owner account from the n8n secret
 (N8N_OWNER_EMAIL, N8N_OWNER_PASSWORD) through the same internal endpoint the setup page
-uses, then creates an API key and stores it in a Secret for the scripts. Runs after every
+uses, then creates an API key and stores it in a Secret for the scripts. Runs with every
 sync and does nothing when the owner and a working key already exist.
 */}}
 apiVersion: v1
@@ -57,7 +57,10 @@ metadata:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-weight: "10"
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
-    argocd.argoproj.io/hook: PostSync
+    # A Sync-phase hook: Argo CD would hold a PostSync hook until every resource is healthy,
+    # which on a shared GPU can take long and blocks later revisions from syncing. The Job
+    # itself waits for n8n to answer, and the model servers sync in the next wave.
+    argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
 spec:
   backoffLimit: 6

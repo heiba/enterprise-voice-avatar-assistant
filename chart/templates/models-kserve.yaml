@@ -74,6 +74,9 @@ metadata:
     serving.kserve.io/deploymentMode: Standard
     serving.kserve.io/autoscalerClass: external
     security.opendatahub.io/enable-auth: "false"
+    # Applied after the application's other resources and hooks; the sync operation does not
+    # wait for the models to be Ready (weights download and GPU start-up can take long)
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   predictor:
     automountServiceAccountToken: false

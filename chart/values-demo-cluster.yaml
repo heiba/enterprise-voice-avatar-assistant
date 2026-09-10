@@ -48,7 +48,7 @@ ingestion:
 # values below are placeholders that keep the chart renderable on its own.
 # Whisper and BGE-M3 share the single L4 with that model through GPU time-slicing
 # (scripts/bootstrap-cluster.sh, GPU_SLICES=4) and fixed memory shares; the bootstrap
-# script lowers the deployed model's share to LLM_GPU_FRACTION (0.6) so all three fit.
+# script lowers the deployed model's share to LLM_GPU_FRACTION (0.55) so all three fit.
 # Granite Guardian does not fit as well, so the guardrail provider is off on this cluster.
 models:
   llm:
@@ -59,12 +59,14 @@ models:
     deploy: true
     args:
       - --gpu-memory-utilization=0.15
+      - --max-num-seqs=8
       - --enforce-eager
   embeddings:
     args:
       - --runner=pooling
       - --max-model-len=8192
       - --gpu-memory-utilization=0.12
+      - --max-num-seqs=8
       - --enforce-eager
   guardrails:
     provider: none

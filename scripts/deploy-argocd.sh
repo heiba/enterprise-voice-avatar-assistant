@@ -109,7 +109,12 @@ until synced; do
   if [ "$waited" -ge 1800 ]; then break; fi
   sleep 20; waited=$((waited + 20))
   if [ $((waited % 40)) -eq 0 ]; then
-    info "application $(app_status) after ${waited}s; pods not ready: $(oc get pods -n "$PROJECT" --no-headers 2>/dev/null | grep -v -E 'Running|Completed' | awk '{print $1":"$3}' | tr '\n' ' ')"
+    info "application $(app_status) after ${waited}s; sync operation: $(oc get applications.argoproj.io "$APP" -n openshift-gitops -o jsonpath='{.status.operationState.phase}: {.status.operationState.message}' 2>/dev/null | cut -c1-160)"
+    for p in $(oc get pods -n "$PROJECT" --no-headers 2>/dev/null | grep -v -E 'Running|Completed' | awk '{print $1":"$3}'); do
+      name=${p%%:*}; state=${p#*:}
+      line=""; case "$state" in *CrashLoop*|*Error*) line=$(oc logs "$name" -n "$PROJECT" --previous --tail=300 2>/dev/null | grep -m1 -E 'Error|error|memory|OOM|Exception' | cut -c1-200);; esac
+      info "pod $name $state${line:+; last error: $line}"
+    done
     oc get applications.argoproj.io "$APP" -n openshift-gitops -o json | jq -r '.status.resources[]? | select(.health.status != null and .health.status != "Healthy") | "     \(.kind)/\(.name): \(.health.status) \(.health.message // "")"' | head -8
     [ "$(oc get applications.argoproj.io "$APP" -n openshift-gitops -o jsonpath='{.status.operationState.phase}')" = "Error" ] && oc get applications.argoproj.io "$APP" -n openshift-gitops -o jsonpath='{.status.operationState.message}{"\n"}' | cut -c1-300 | sed 's/^/     /'
   fi

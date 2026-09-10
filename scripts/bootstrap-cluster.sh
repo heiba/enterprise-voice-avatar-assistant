@@ -9,7 +9,7 @@
 #   PROJECT=voice-avatar-assistant   project created for the assistant (Argo CD managed)
 #   GPU_SLICES=4                     model servers that may share one GPU (1 = exclusive GPUs)
 #   LLM_NAME=llama-32-3b-instruct    InferenceService already deployed on the cluster (prerequisite)
-#   LLM_GPU_FRACTION=0.6             GPU memory share left to that model so Whisper and BGE-M3 fit
+#   LLM_GPU_FRACTION=0.55            GPU memory share left to that model so Whisper and BGE-M3 fit
 #   INSTALL_MISSING=1                install absent operators from deploy/bootstrap (0 = report only)
 #   LOG_FILE=~/assistant-bootstrap-<timestamp>.log
 set -uo pipefail
@@ -17,7 +17,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT="${PROJECT:-voice-avatar-assistant}"
 GPU_SLICES="${GPU_SLICES:-4}"
 LLM_NAME="${LLM_NAME:-llama-32-3b-instruct}"
-LLM_GPU_FRACTION="${LLM_GPU_FRACTION:-0.6}"
+LLM_GPU_FRACTION="${LLM_GPU_FRACTION:-0.55}"
 INSTALL_MISSING="${INSTALL_MISSING:-1}"
 LOG_FILE="${LOG_FILE:-$HOME/assistant-bootstrap-$(date +%Y%m%d-%H%M%S).log}"
 exec > >(tee -a "$LOG_FILE") 2>&1

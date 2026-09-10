@@ -163,7 +163,7 @@ write_values_object() {  # -> $STATE_DIR/values-object.json, deep-merged over th
     jq -n --arg le "$REMOTE_LLM_ENDPOINT" --arg lm "$REMOTE_LLM_MODEL" --arg se "$REMOTE_STT_ENDPOINT" --arg sm "$REMOTE_STT_MODEL" --arg ee "$REMOTE_EMB_ENDPOINT" --arg em "$REMOTE_EMB_MODEL" \
       '{models:{llm:{deploy:false,endpoint:$le,servedModelName:$lm},stt:{deploy:false,endpoint:$se,servedModelName:$sm},embeddings:{deploy:false,endpoint:$ee,servedModelName:$em},guardrails:{provider:"none",deploy:false}}}' ;;
   *)
-    jq -n --argjson d "$llm_deploy" '{models:{llm:{deploy:$d,args:["--max-model-len=8192","--gpu-memory-utilization=0.45","--max-num-seqs=8","--enforce-eager","--enable-auto-tool-choice","--tool-call-parser=llama3_json"]},stt:{deploy:true,args:["--gpu-memory-utilization=0.15","--enforce-eager"]},embeddings:{args:["--runner=pooling","--max-model-len=8192","--gpu-memory-utilization=0.12","--enforce-eager"]},guardrails:{provider:"none",deploy:false}}}' ;;
+    jq -n --argjson d "$llm_deploy" '{models:{llm:{deploy:$d,args:["--max-model-len=8192","--gpu-memory-utilization=0.45","--max-num-seqs=8","--enforce-eager","--enable-auto-tool-choice","--tool-call-parser=llama3_json"]},stt:{deploy:true,args:["--gpu-memory-utilization=0.15","--max-num-seqs=8","--enforce-eager"]},embeddings:{args:["--runner=pooling","--max-model-len=8192","--gpu-memory-utilization=0.12","--max-num-seqs=8","--enforce-eager"]},guardrails:{provider:"none",deploy:false}}}' ;;
   esac > "$STATE_DIR/values-object.json"
 }
 
@@ -229,20 +229,20 @@ step2() {
     ok "remote profile: every model is a remote endpoint; keys LLM_API_KEY, STT_API_KEY, EMBEDDINGS_API_KEY go into $SECRETS_FILE"
   elif [ "${GPUS:-0}" -eq 0 ]; then
     bad "not enough GPUs: the demo needs at least 1 NVIDIA GPU with 24 GB (an L4), this cluster has none."
-    say "     required: 1 GPU of 24 GB shared by the language model (60%), Whisper (15%) and BGE-M3 (12%)"
+    say "     required: 1 GPU of 24 GB shared by the language model (55%), Whisper (15%) and BGE-M3 (12%)"
     say "     available: 0 GPUs (no node carries nvidia.com/gpu.count; check the instance type with: oc get nodes -L node.kubernetes.io/instance-type)"
     say "     options: add a GPU node (g6.8xlarge or larger), or run with remote model endpoints: PROFILE=remote REMOTE_LLM_ENDPOINT=... scripts/setup.sh"
     return 1
   elif [ -n "$GPU_MEMORY" ] && [ "$GPU_MEMORY" -lt 20000 ]; then
     bad "not enough GPU memory: the demo needs 22 GB or more on one GPU, this cluster's ${GPU_PRODUCT:-GPU} has $mem_gib GiB."
-    say "     required: language model 60% (about 14 GB with the 3B model), Whisper 15% (3.6 GB), BGE-M3 12% (2.9 GB) on the same card"
+    say "     required: language model 55% (about 12.5 GB with the 3B model), Whisper 15% (3.4 GB), BGE-M3 12% (2.7 GB) on the same card"
     say "     available: $GPUS x ${GPU_PRODUCT:-GPU} with $mem_gib GiB"
     say "     options: a GPU with 24 GB (L4, A10G, or larger), or remote endpoints for the language model (PROFILE=remote)"
     return 1
   else
     PROFILE=gpu
     ok "gpu profile: all $GPUS GPU(s) used, each advertised 4 times through time-slicing"
-    if [ -n "$LLM_NS" ]; then say "     language model: $LLM_NS/$LLM_NAME, its GPU memory share is lowered to 60% in step 3"; else say "     language model: Llama 3.1 8B (4-bit) deployed by the chart at 45%"; fi
+    if [ -n "$LLM_NS" ]; then say "     language model: $LLM_NS/$LLM_NAME, its GPU memory share is lowered to 55% in step 3"; else say "     language model: Llama 3.1 8B (4-bit) deployed by the chart at 45%"; fi
     say "     Whisper 15%, BGE-M3 12%; no guardrail model in this demo"
   fi
   save PROFILE "$PROFILE"; write_values_object; ok "profile $PROFILE saved ($STATE_DIR/values-object.json)"; mark 2
@@ -251,7 +251,7 @@ step3() {
   say "${B}Step 3: cluster bootstrap${N} (operators, KServe, GPU sharing, model share, Argo CD, project)"
   [ -n "${PROFILE:-}" ] || { bad "choose the profile first (step 2)"; return 1; }
   local log; log=$(logfile bootstrap); local slices; slices=$(profile_slices "$PROFILE")
-  local frac=0.6
+  local frac=0.55
   say "  running scripts/bootstrap-cluster.sh with GPU_SLICES=$slices LLM_GPU_FRACTION=$frac (log $log)"
   PROJECT="$PROJECT" GPU_SLICES="$slices" LLM_NAME="${LLM_NS:+$LLM_NAME}" LLM_GPU_FRACTION="$frac" LOG_FILE="$log" "$ROOT/scripts/bootstrap-cluster.sh" && { mark 3; return 0; }
   bad "bootstrap reported problems; see $log, fix, and run: scripts/setup.sh --step 3"; return 1

@@ -297,7 +297,7 @@ visit: its owner account, API key, Slack credential and workflows are all create
 | GPUs on the cluster | Profile | Layout |
 |---|---|---|
 | none | stop | The script stops: the demo needs one GPU with 24 GB for the language model, Whisper and BGE-M3. Remote OpenAI-compatible endpoints can replace them: `PROFILE=remote REMOTE_LLM_ENDPOINT=… REMOTE_LLM_MODEL=… REMOTE_STT_ENDPOINT=… REMOTE_EMB_ENDPOINT=… scripts/setup.sh`, with the keys in `~/secrets.env` |
-| 1 or more, 24 GB each | `gpu` | Every GPU is used and advertised four times through the GPU Operator's time-slicing; the language model gets 60% of a card (the deployed Llama 3.2 3B, or Llama 3.1 8B 4-bit deployed by the chart at 45%), Whisper 15%, BGE-M3 12%. No guardrail model runs in this demo. A GPU with less than 20 GB stops the script |
+| 1 or more, 24 GB each | `gpu` | Every GPU is used and advertised four times through the GPU Operator's time-slicing; the language model gets 55% of a card (the deployed Llama 3.2 3B, or Llama 3.1 8B 4-bit deployed by the chart at 45%), Whisper 15%, BGE-M3 12%. No guardrail model runs in this demo. A GPU with less than 20 GB stops the script |
 
 The profile is a small JSON overlay (`~/.assistant-setup/values-object.json`) merged over
 `chart/values-demo-cluster.yaml` by Argo CD, so the values file in git stays cluster-neutral:

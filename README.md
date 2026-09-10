@@ -251,8 +251,9 @@ repository.
    ssh lab-user@bastion.<guid>.<base domain>
    ```
 
-   Confirm the cluster login: `oc whoami` prints `kubeadmin`. If not, log in with the API
-   URL and password from the same e-mail: `oc login <api url> -u kubeadmin`.
+   Keep the e-mail at hand: if the bastion is not logged in to the cluster, or its session
+   expired, the script asks for the API URL (it proposes the one it finds on the host), the
+   user (`kubeadmin`) and the password, and logs in for you.
 
 2. Clone the repository:
 

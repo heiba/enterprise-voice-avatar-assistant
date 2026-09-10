@@ -41,6 +41,36 @@ logfile() { echo "$STATE_DIR/logs/$1-$(date +%Y%m%d-%H%M%S).log"; }
 # shellcheck disable=SC1090
 . "$STATE" 2>/dev/null || true
 
+# ---------------------------------------------------------------- login ---------------------
+# Logs in when the bastion is not (or its token expired): proposes the API URL it can find,
+# asks for the user (kubeadmin) and the password from the provisioning e-mail, hidden.
+ensure_login() {
+  command -v oc >/dev/null || { bad "oc is not installed on this host (https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/)"; return 1; }
+  if oc whoami >/dev/null 2>&1; then return 0; fi
+  say "${B}Cluster login${N}"
+  local reason; reason=$(oc whoami 2>&1 | head -1); note "oc whoami: ${reason:-no session}"
+  local -a cands=(); local u host
+  [ -n "${API_URL:-}" ] && cands+=("$API_URL")
+  while read -r u; do [ -n "$u" ] && cands+=("$u"); done < <(oc config view -o jsonpath='{range .clusters[*]}{.cluster.server}{"\n"}{end}' 2>/dev/null)
+  host=$(hostname -f 2>/dev/null || hostname); case "$host" in bastion.*) cands+=("https://api.${host#bastion.}:6443");; esac
+  local -a uniq=(); for u in "${cands[@]}"; do case " ${uniq[*]:-} " in *" $u "*) ;; *) uniq+=("$u");; esac; done
+  if [ "${#uniq[@]}" -gt 1 ]; then say "  API URLs found on this host:"; printf '     %s\n' "${uniq[@]}"; fi
+  local api user pass
+  ask api "API URL (from the provisioning e-mail, https://api.<guid>.<base domain>:6443)" "${uniq[0]:-}"
+  [ -n "$api" ] || { bad "an API URL is needed"; return 1; }
+  ask user "User" "${LOGIN_USER:-kubeadmin}"
+  ask_secret pass "Password for $user"
+  [ -n "$pass" ] || { bad "a password is needed"; return 1; }
+  if oc login "$api" -u "$user" -p "$pass" >/dev/null 2>&1 || oc login "$api" -u "$user" -p "$pass" --insecure-skip-tls-verify=true >/dev/null 2>&1; then
+    ok "logged in to $api as $(oc whoami)"; save API_URL "$api"; save LOGIN_USER "$user"
+    oc auth can-i create namespaces >/dev/null 2>&1 && ok "cluster-admin permissions" || warn "this user cannot create cluster resources; the bootstrap needs kubeadmin or a cluster-admin"
+    return 0
+  fi
+  bad "login failed: $(oc login "$api" -u "$user" -p "$pass" --insecure-skip-tls-verify=true 2>&1 | tail -1)"
+  note "check the API URL and password in the provisioning e-mail; from the laptop the same values work with oc as well"
+  return 1
+}
+
 # ---------------------------------------------------------------- discovery -----------------
 discover() {
   API=""; USER_NAME=""; OCP_VERSION=""; DOMAIN="${DOMAIN:-}"; NODE_COUNT=0; INSTANCE=""; GPUS="${GPUS:-0}"; GPU_PRODUCT=""; GPU_REPLICAS=""; GPU_ALLOC=0
@@ -125,7 +155,7 @@ step_state() {  # prints done|todo|attention and a detail
 }
 show_status() {
   say ""; say "${B}Enterprise voice avatar assistant: setup${N}"
-  if [ "$LOGGED_IN" = 1 ]; then say "  cluster $API as $USER_NAME, apps domain $DOMAIN"; else say "  ${R}not logged in${N}: oc login <api url> -u kubeadmin"; fi
+  if [ "$LOGGED_IN" = 1 ]; then say "  cluster $API as $USER_NAME, apps domain $DOMAIN"; else say "  ${R}not logged in${N}: the script asks for the API URL, user and password when run"; fi
   say "  progress file $STATE, logs $STATE_DIR/logs"; say ""
   NEXT=""
   for i in 1 2 3 4 5 6 7 8 9; do
@@ -140,7 +170,7 @@ show_status() {
 # ---------------------------------------------------------------- steps ---------------------
 step1() {
   say "${B}Step 1: cluster and prerequisites${N}"
-  [ "$LOGGED_IN" = 1 ] || { bad "log in first: oc login <api url> -u kubeadmin (from the provisioning e-mail)"; return 1; }
+  [ "$LOGGED_IN" = 1 ] || { ensure_login && discover || return 1; }
   for t in oc jq git openssl curl helm python3; do command -v $t >/dev/null && ok "$t" || warn "$t missing (sudo dnf install -y $t; helm: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash)"; done
   oc auth can-i create namespaces >/dev/null 2>&1 && ok "cluster-admin permissions" || { bad "this user cannot create cluster resources; use kubeadmin"; return 1; }
   ok "OpenShift $OCP_VERSION on $NODE_COUNT node(s), $INSTANCE"
@@ -292,6 +322,7 @@ step9() {
 
 # ---------------------------------------------------------------- main ----------------------
 command -v jq >/dev/null || { echo "jq is required: sudo dnf install -y jq"; exit 1; }
+[ "$MODE" = status ] || ensure_login || { discover; show_status; exit 1; }
 discover; show_status
 case "$MODE" in
 status) exit 0 ;;

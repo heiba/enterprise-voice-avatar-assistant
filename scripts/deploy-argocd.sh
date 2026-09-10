@@ -8,6 +8,7 @@
 #   PROJECT=voice-avatar-assistant   project prepared by bootstrap-cluster.sh
 #   SECRETS_FILE=<path>              KEY=value file with the API keys (see secrets.env.example)
 #   VALUES_FILE=values-demo-cluster.yaml   values file in chart/
+#   VALUES_OBJECT_FILE=<json>        extra values merged on top (the profile overlay written by setup.sh)
 #   LLM_NAME=llama-32-3b-instruct    InferenceService already on the cluster, used as the language model
 #   LLM_ENDPOINT / LLM_MODEL         override the discovered OpenAI-compatible base URL and model id
 #   REPO_URL=<git url>               fork to deploy from (default: the upstream repository)
@@ -55,6 +56,8 @@ if user=$(oc whoami 2>/dev/null); then ok "logged in as $user"; else fail "not l
 oc get namespace "$PROJECT" >/dev/null 2>&1 && ok "project $PROJECT exists" || { fail "project $PROJECT missing: run scripts/bootstrap-cluster.sh first"; exit 1; }
 oc get deployment openshift-gitops-server -n openshift-gitops >/dev/null 2>&1 && ok "Argo CD present" || { fail "Argo CD not found in openshift-gitops: run scripts/bootstrap-cluster.sh"; exit 1; }
 [ -f "$ROOT/chart/$VALUES_FILE" ] && ok "values file chart/$VALUES_FILE" || { fail "chart/$VALUES_FILE does not exist in this clone (VALUES_FILE)"; exit 1; }
+VALUES_OBJECT='{}'
+if [ -n "${VALUES_OBJECT_FILE:-}" ]; then VALUES_OBJECT=$(jq -c . "$VALUES_OBJECT_FILE") && ok "values overlay $VALUES_OBJECT_FILE" || { fail "$VALUES_OBJECT_FILE is not valid JSON"; exit 1; }; fi
 DOMAIN="${DOMAIN:-$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')}"
 [ -n "$DOMAIN" ] && ok "apps domain $DOMAIN" || { fail "could not read the apps domain; set DOMAIN="; exit 1; }
 if [ -n "${SECRETS_FILE:-}" ]; then [ -r "$SECRETS_FILE" ] && ok "secrets file $SECRETS_FILE" || { fail "SECRETS_FILE $SECRETS_FILE is not readable"; exit 1; }; else warn "no SECRETS_FILE: integrations stay off unless the secrets already exist"; fi
@@ -63,7 +66,7 @@ if oc get secret livekit-turn-tls -n "$PROJECT" >/dev/null 2>&1; then ok "TURN c
 step "Language model ($LLM_NAME)"
 if [ -z "${LLM_ENDPOINT:-}" ]; then
   llm_ns=$(oc get isvc -A -o json 2>/dev/null | jq -r --arg n "$LLM_NAME" '.items[] | select(.metadata.name==$n) | .metadata.namespace' | head -1)
-  [ -n "$llm_ns" ] || { fail "no InferenceService named $LLM_NAME (SETUP.md prerequisites); or set LLM_ENDPOINT and LLM_MODEL"; exit 1; }
+  [ -n "$llm_ns" ] || { fail "no InferenceService named $LLM_NAME (README, Setup); or set LLM_ENDPOINT and LLM_MODEL"; exit 1; }
   addr=$(oc get isvc "$LLM_NAME" -n "$llm_ns" -o jsonpath='{.status.address.url}')
   [ -n "$addr" ] || addr="http://${LLM_NAME}-predictor.${llm_ns}.svc.cluster.local:8080"
   LLM_ENDPOINT="${addr%/}/v1"
@@ -73,7 +76,7 @@ info "probing $LLM_ENDPOINT/models from inside the cluster"
 models_json=$(oc run llm-probe-$$ -n "$PROJECT" --rm -i --restart=Never --quiet --image=registry.access.redhat.com/ubi9/ubi-minimal:latest -- curl -sk --max-time 20 -H "Authorization: Bearer ${LLM_API_KEY:-none}" "$LLM_ENDPOINT/models" 2>/dev/null || true)
 served=$(printf '%s' "$models_json" | jq -r '.data[0].id // empty' 2>/dev/null)
 if [ -n "$served" ]; then ok "endpoint answers; served model id: $served"; LLM_MODEL="${LLM_MODEL:-$served}"; else
-  warn "no answer from $LLM_ENDPOINT/models (auth or TLS?); using model id ${LLM_MODEL:-$LLM_NAME}"; LLM_MODEL="${LLM_MODEL:-$LLM_NAME}"
+  warn "no answer from $LLM_ENDPOINT/models yet (not deployed yet, auth, or TLS?); using model id ${LLM_MODEL:-$LLM_NAME}"; LLM_MODEL="${LLM_MODEL:-$LLM_NAME}"
   debug "oc get isvc $LLM_NAME -A -o yaml | grep -A3 -i 'auth\|url'; the chart's test pod re-checks later"; fi
 printf 'DOMAIN=%s\nPROJECT=%s\nVALUES_FILE=%s\nLLM_ENDPOINT=%s\nLLM_MODEL=%s\n' "$DOMAIN" "$PROJECT" "$VALUES_FILE" "$LLM_ENDPOINT" "$LLM_MODEL" > "$CLUSTER_ENV" && ok "cluster facts written to $CLUSTER_ENV (source it for scripts/demo-preflight.sh)"
 
@@ -87,7 +90,7 @@ step "Argo CD application"
 run oc apply -f "$ROOT/deploy/argocd/appproject.yaml" >/dev/null
 oc patch appproject "$APP" -n openshift-gitops --type merge -p "{\"spec\":{\"sourceRepos\":[\"$REPO_URL\"],\"destinations\":[{\"server\":\"https://kubernetes.default.svc\",\"namespace\":\"$PROJECT\"}]}}" >/dev/null && ok "AppProject allows $REPO_URL -> $PROJECT"
 run oc apply -f "$ROOT/deploy/argocd/application.yaml" >/dev/null
-oc patch application "$APP" -n openshift-gitops --type merge -p "{\"spec\":{\"source\":{\"repoURL\":\"$REPO_URL\",\"targetRevision\":\"$TARGET_REVISION\",\"helm\":{\"valueFiles\":[\"values.yaml\",\"$VALUES_FILE\"],\"parameters\":[{\"name\":\"global.domain\",\"value\":\"$DOMAIN\"},{\"name\":\"models.llm.endpoint\",\"value\":\"$LLM_ENDPOINT\"},{\"name\":\"models.llm.servedModelName\",\"value\":\"$LLM_MODEL\"}]}},\"destination\":{\"namespace\":\"$PROJECT\"}}}" >/dev/null \
+oc patch application "$APP" -n openshift-gitops --type merge -p "{\"spec\":{\"source\":{\"repoURL\":\"$REPO_URL\",\"targetRevision\":\"$TARGET_REVISION\",\"helm\":{\"valueFiles\":[\"values.yaml\",\"$VALUES_FILE\"],\"valuesObject\":$VALUES_OBJECT,\"parameters\":[{\"name\":\"global.domain\",\"value\":\"$DOMAIN\"},{\"name\":\"models.llm.endpoint\",\"value\":\"$LLM_ENDPOINT\"},{\"name\":\"models.llm.servedModelName\",\"value\":\"$LLM_MODEL\"}]}},\"destination\":{\"namespace\":\"$PROJECT\"}}}" >/dev/null \
   && ok "Application $APP: $REPO_URL@$TARGET_REVISION, values $VALUES_FILE, global.domain=$DOMAIN, llm $LLM_MODEL at $LLM_ENDPOINT"
 oc annotate application "$APP" -n openshift-gitops argocd.argoproj.io/refresh=normal --overwrite >/dev/null
 [ "${WAIT:-1}" = "1" ] || { echo "Application registered (WAIT=0)."; exit 0; }
@@ -137,8 +140,9 @@ done
 printf '  %-9s https://%s\n' "argocd" "$(oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}')"
 if [ "${RUN_TESTS:-0}" = "1" ]; then
   step "Connectivity test pod"
-  NS="$PROJECT" "$ROOT/scripts/test-services.sh" -f "$ROOT/chart/$VALUES_FILE" --set global.domain="$DOMAIN" --set models.llm.endpoint="$LLM_ENDPOINT" --set models.llm.servedModelName="$LLM_MODEL" || FAILED=$((FAILED + 1))
+  overlay=(); [ -n "${VALUES_OBJECT_FILE:-}" ] && overlay=(-f "$VALUES_OBJECT_FILE")
+  NS="$PROJECT" "$ROOT/scripts/test-services.sh" -f "$ROOT/chart/$VALUES_FILE" "${overlay[@]}" --set global.domain="$DOMAIN" --set models.llm.endpoint="$LLM_ENDPOINT" --set models.llm.servedModelName="$LLM_MODEL" || FAILED=$((FAILED + 1))
 fi
 echo
 if [ "$FAILED" -gt 0 ]; then echo "Deployment finished with $FAILED problem(s); see the FAIL lines above and the log $LOG_FILE"; exit 1; fi
-echo "Deployment complete. Next: n8n first run and the sample documents (SETUP.md)."
+echo "Deployment complete. Next: n8n first run and the sample documents (./setup.sh)."

@@ -15,6 +15,7 @@ Ground a voice-enabled, avatar-fronted assistant in your company documents with 
   - [Minimum software requirements](#minimum-software-requirements)
   - [Required user permissions](#required-user-permissions)
   - [Third-party accounts and keys](#third-party-accounts-and-keys)
+- [Setup](#setup)
 - [Deploy](#deploy)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
@@ -209,7 +210,115 @@ All optional: Tavus (or Simli, Hedra) for avatar video, Slack for notifications 
 
 ## Deploy
 
-Starting from a freshly provisioned cluster, such as the Red Hat Demo Platform environment "Red Hat OpenShift AI 3" with a single GPU and a deployed Llama 3.2 3B? [SETUP.md](SETUP.md) is the end-to-end guide: prerequisites, platform checks, GPU sharing, every key and integration created from scratch, Argo CD deployment, n8n setup and verification, with one script per phase.
+## Setup
+
+This section takes a freshly provisioned OpenShift AI cluster to a working demo: platform
+checks, one GPU shared by the model servers, every key and integration created from
+scratch, the chart deployed through Argo CD, n8n wired to Slack and Google Docs, the sample
+documents loaded, and a verification at the end. One interactive script on the bastion
+host drives it; it discovers what the cluster already has, shows the progress, runs the next
+step, and saves its progress so it can be stopped and resumed at any point.
+
+### What is assumed
+
+Red Hat employees can provision the environment from the Red Hat Demo Platform catalog item
+[Red Hat OpenShift AI 3](https://catalog.demo.redhat.com/catalog/babylon-catalog-prod?item=babylon-catalog-prod/published.openshift-ai-v3.prod);
+anyone else needs a cluster with the same properties.
+
+| Assumed | Detail |
+|---|---|
+| 1. OpenShift Container Platform 4.20, single-node (SNO) | One AWS GPU instance runs everything. OpenShift Lightspeed is enabled on it (not used by the assistant) |
+| 2. Red Hat OpenShift AI 3 | Installed from the `stable-3.x` channel, with KServe enabled and the supporting operators from the environment's own guide: cert-manager, Node Feature Discovery, NVIDIA GPU Operator, Red Hat Connectivity Link |
+| 3. A Llama 3.2 3B Instruct model deployed as `llama-32-3b-instruct` | Deployed from the OpenShift AI model catalog by following the environment's guide (project `my-first-model`, vLLM, no token authentication). The assistant uses it as its language model |
+| 4. A bastion host | SSH access with `oc` logged in as `kubeadmin`; the provisioning e-mail or Showroom page has the host, user and password. Every command below runs there |
+| Instance size | `g6.8xlarge`: 32 vCPU, 128 GB RAM, one NVIDIA L4 with 24 GB. Every `g6.*xlarge` size has one L4; `g6.12xlarge` and `g6.24xlarge` have four |
+
+The environment auto-stops after six hours and is destroyed after 48. Disable auto-stop in
+RHDP if you keep it, and expect to redo the setup on a new cluster; the script makes that a
+short exercise.
+
+Accounts for the integrations, all free: a Slack workspace where you can create apps and
+channels, a [Tavus](https://platform.tavus.io) account for the avatar (25 conversational
+minutes a month, one stream), and a Google account for Google Docs and Drive. No GitHub or
+Quay account is needed: the images are public on Quay and Argo CD reads this public
+repository.
+
+### Run it
+
+1. SSH to the bastion host with the host, user and password from the provisioning e-mail:
+
+   ```bash
+   ssh lab-user@bastion.<guid>.<base domain>
+   ```
+
+   Confirm the cluster login: `oc whoami` prints `kubeadmin`. If not, log in with the API
+   URL and password from the same e-mail: `oc login <api url> -u kubeadmin`.
+
+2. Clone the repository:
+
+   ```bash
+   git clone https://github.com/rh-ai-quickstart/enterprise-voice-avatar-assistant.git ~/enterprise-voice-avatar-assistant && cd ~/enterprise-voice-avatar-assistant
+   ```
+
+3. Run the setup and follow it:
+
+   ```bash
+   ./setup.sh
+   ```
+
+   It prints the state of the cluster and of every step, then offers the next one. Press
+   Enter to run it, type a number to run a specific step, `q` to leave. `./setup.sh --status`
+   only shows the state; `./setup.sh --step N` runs one step again; `./setup.sh --yes` accepts
+   every suggested answer. Progress and discovered facts are in `~/.assistant-setup/state.env`,
+   logs of each step in `~/.assistant-setup/logs/`.
+
+### What the steps do
+
+| Step | What happens | Manual part |
+|---|---|---|
+| 1 Cluster and prerequisites | Checks the login and tools, the OpenShift and OpenShift AI versions, KServe, the operators, the GPUs, the deployed language model, the storage class | none |
+| 2 Deployment profile | Picks a profile from the GPU count (below) and asks for confirmation; with no GPU it asks for remote model endpoints | confirm |
+| 3 Cluster bootstrap | `scripts/bootstrap-cluster.sh`: installs missing operators from `deploy/bootstrap/`, sets KServe to Managed, applies GPU time-slicing, lowers the deployed model's GPU memory share so the others fit, waits for Argo CD, creates the project with its Argo CD and dashboard labels | none, 5 to 15 min |
+| 4 TURN certificate | `scripts/setup-turn-tls.sh`: copies the cluster's wildcard certificate into the project for TURN over TLS, or asks Let's Encrypt for one through cert-manager if the cluster's is not trusted | an e-mail address in the cert-manager case |
+| 5 Keys and integrations | Creates `~/secrets.env` from `secrets.env.example`, prints what to create on your laptop (Slack app from `n8n/slack-app-manifest.json`, Tavus key, Google Cloud OAuth client and Drive folder) with the URLs that carry the cluster's domain, and asks for each value with hidden input. Nothing is typed into `oc` | the browser work |
+| 6 Deploy with Argo CD | `scripts/deploy-argocd.sh`: finds the language model, creates the secrets from the file, registers the Argo CD application with the domain, the model endpoint and the profile, waits for the sync, the models and the pods, prints the URLs, runs the connectivity test pod | none, 10 to 20 min |
+| 7 n8n first run | Prints the four browser actions (owner account, Google Docs credential, attach it to WF5 and publish, check that WF1 to WF7 are published); with an n8n API key it verifies the workflows itself | the browser work |
+| 8 Sample documents | `scripts/load-sample-docs.sh`, waits for the ingestion, `scripts/check-index.sh` | none |
+| 9 Verification | `scripts/demo-preflight.sh`: models, Argo CD, test pod, n8n webhooks; then the URLs and the pointer to the demo script | none |
+
+Each step checks the cluster before acting, so work already done by hand or by an earlier
+run is recognised. Steps 5 and 7 are the only ones that need you in a browser.
+
+### GPUs and profiles
+
+| GPUs on the cluster | Profile | Layout |
+|---|---|---|
+| none | `remote` | Every model is a remote OpenAI-compatible endpoint (Models-as-a-Service); the script asks for the URLs, model ids and keys |
+| 1 to 3 | `shared` | Each GPU is advertised four times through the GPU Operator's time-slicing; the language model gets 60% of a card (the deployed Llama 3.2 3B, or Llama 3.1 8B 4-bit deployed by the chart at 45%), Whisper 15%, BGE-M3 12%; Granite Guardian does not fit, so the guardrail provider is off |
+| 4 or more | `full` | One GPU per model server, guardrails on |
+
+The profile is a small JSON overlay (`~/.assistant-setup/values-object.json`) merged over
+`chart/values-demo-cluster.yaml` by Argo CD, so the values file in git stays cluster-neutral:
+it holds no domain, no endpoint and no key.
+
+### Day two
+
+- **Application updates.** Every push to `main` that touches the services builds images and
+  commits their tags into `chart/values-demo-cluster.yaml`; Argo CD syncs within minutes.
+- **A changed key.** Edit `~/secrets.env`, then `./setup.sh --step 5` (rewrites the
+  integrations secret, passwords are kept) and `oc rollout restart deployment/n8n deployment/rag-api deployment/voice-agent -n voice-avatar-assistant`.
+- **Chart values** (faces, voices, model shares) are commits to `chart/values-demo-cluster.yaml`;
+  `scripts/deploy-argocd.sh` accepts `REPO_URL` and `TARGET_REVISION` for a fork or a branch.
+- **Workflows.** After editing `chart/files/n8n-workflows/`, re-import with
+  `N8N_URL=<n8n url> N8N_API_KEY=… scripts/import-workflows.sh`; credentials attached in the
+  editor survive.
+- **Next cluster.** Clone, `./setup.sh`, and update the two external URLs that contain the
+  cluster domain: the Slack app's request URL under Interactivity & Shortcuts, and the Google
+  OAuth client's redirect URI. Tokens, keys and the Drive folder stay valid.
+
+When something fails, the step prints a `debug:` line with the commands that show why, the
+logs are in `~/.assistant-setup/logs/`, and [docs/troubleshooting.md](docs/troubleshooting.md)
+lists the symptoms seen while building the quickstart with the fix for each.
 
 ### Prerequisites
 
@@ -247,7 +356,7 @@ PROJECT=voice-avatar-assistant scripts/deploy.sh
 
 **Manual Helm steps.** Secrets, `helm install`, per-model options and the n8n workflows step by step: [docs/deployment.md](docs/deployment.md#manual-installation-with-helm).
 
-**Argo CD.** The same chart driven by the OpenShift GitOps operator: `SECRETS_FILE=~/secrets.env scripts/deploy-argocd.sh` after `scripts/bootstrap-cluster.sh`, both described in [SETUP.md](SETUP.md); the manual steps are in [docs/deployment.md](docs/deployment.md#deploying-with-argo-cd).
+**Argo CD.** The same chart driven by the OpenShift GitOps operator: this is what [Setup](#setup) does with `setup.sh`; the manual steps are in [docs/deployment.md](docs/deployment.md#deploying-with-argo-cd).
 
 The generated secrets, how to read, rotate and back them up, are described in [docs/deployment.md](docs/deployment.md#working-with-the-generated-secrets).
 

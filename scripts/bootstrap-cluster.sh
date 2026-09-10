@@ -79,7 +79,7 @@ install_operator "OpenShift GitOps" "openshift-gitops-operator" deploy/bootstrap
 if csv_succeeded "rhods-operator"; then
   channel=$(oc get subscription rhods-operator -n redhat-ods-operator -o jsonpath='{.spec.channel}' 2>/dev/null)
   ok "OpenShift AI $(csv_phase rhods-operator | cut -d' ' -f2) (channel ${channel:-unknown}; left as installed)"
-  case "$(csv_phase rhods-operator | cut -d' ' -f2)" in 2.*) fail "OpenShift AI 2.x found; this quickstart needs 3.x (see SETUP.md prerequisites)";; esac
+  case "$(csv_phase rhods-operator | cut -d' ' -f2)" in 2.*) fail "OpenShift AI 2.x found; this quickstart needs 3.x (see the README, Setup)";; esac
 else
   install_operator "OpenShift AI" "rhods-operator" deploy/bootstrap/operators/rhoai.yaml || true
 fi
@@ -143,10 +143,13 @@ else
   ok "GPU sharing off (GPU_SLICES=1); allocatable nvidia.com/gpu = $(oc get nodes -l nvidia.com/gpu.present=true -o jsonpath='{.items[0].status.allocatable.nvidia\.com/gpu}')"
 fi
 
-step "Pre-deployed language model ($LLM_NAME)"
-llm_ns=$(oc get isvc -A -o json 2>/dev/null | jq -r --arg n "$LLM_NAME" '.items[] | select(.metadata.name==$n) | .metadata.namespace' | head -1)
-if [ -z "$llm_ns" ]; then
-  fail "no InferenceService named $LLM_NAME on the cluster; deploy Llama 3.2 3B Instruct from the OpenShift AI model catalog first (SETUP.md prerequisites), or set LLM_NAME"
+step "Pre-deployed language model (${LLM_NAME:-none})"
+llm_ns=""
+[ -n "$LLM_NAME" ] && llm_ns=$(oc get isvc -A -o json 2>/dev/null | jq -r --arg n "$LLM_NAME" '.items[] | select(.metadata.name==$n) | .metadata.namespace' | head -1)
+if [ -z "$LLM_NAME" ]; then
+  ok "no pre-deployed model expected; the chart deploys its own language model"
+elif [ -z "$llm_ns" ]; then
+  warn "no InferenceService named $LLM_NAME on the cluster; the chart will deploy its own language model (or deploy one from the OpenShift AI model catalog and rerun)"
   debug "oc get isvc -A"
 else
   ready=$(oc get isvc "$LLM_NAME" -n "$llm_ns" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')
@@ -185,4 +188,4 @@ step "Summary"
 NAMESPACE="$PROJECT" "$ROOT/scripts/check-prereqs.sh" || FAILED=$((FAILED + 1))
 echo
 if [ "$FAILED" -gt 0 ]; then echo "Bootstrap finished with $FAILED problem(s); see the FAIL lines above and the log $LOG_FILE"; exit 1; fi
-echo "Bootstrap complete. Next: scripts/setup-turn-tls.sh, then SECRETS_FILE=~/secrets.env scripts/deploy-argocd.sh (see SETUP.md)."
+echo "Bootstrap complete. Next: scripts/setup-turn-tls.sh, then scripts/deploy-argocd.sh, or simply ./setup.sh."

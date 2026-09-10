@@ -1,6 +1,6 @@
 # Deployment guide
 
-For a complete walk-through on a freshly provisioned cluster, including the platform prerequisites, GPU sharing, creating every key and the Argo CD path with scripts, see [SETUP.md](../SETUP.md). This guide documents the individual steps and options.
+For a complete walk-through on a freshly provisioned cluster, including the platform prerequisites, GPU sharing, creating every key and the Argo CD path, run `setup.sh` on the bastion host as described in the README's [Setup](../README.md#setup) section. This guide documents the individual steps and options.
 
 The [README](../README.md) shows the one-command install. This page has the manual Helm steps behind it, the remote-model and Argo CD variants, the optional third-party accounts, and how to handle the generated secrets. Every chart value is documented in [../chart/README.md](../chart/README.md).
 
@@ -66,7 +66,7 @@ echo https://$(oc get route/n8n -n ${PROJECT} --template='{{.spec.host}}')
 
 ## Deploying with Argo CD
 
-Scripted: `scripts/bootstrap-cluster.sh` (cluster admin, once) then `SECRETS_FILE=~/secrets.env scripts/deploy-argocd.sh`, see [SETUP.md](../SETUP.md). The deploy script sets the apps domain and the deployed language model's endpoint on the application, so `chart/values-demo-cluster.yaml` holds nothing cluster-specific. The steps below are what the scripts do.
+Scripted: `setup.sh` (README, [Setup](../README.md#setup)) runs `scripts/bootstrap-cluster.sh` (cluster admin, once) then `scripts/deploy-argocd.sh`, which sets the apps domain, the language model's endpoint and the GPU profile on the application, so `chart/values-demo-cluster.yaml` holds nothing cluster-specific. The steps below are what the scripts do.
 
 If the OpenShift GitOps operator is installed, Argo CD can own the deployment and keep it in sync with the `main` branch. It renders the same chart, so nothing differs from a manual install.
 

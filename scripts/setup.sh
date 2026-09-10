@@ -334,13 +334,34 @@ step5() {
   if [ -n "${TAVUS_API_KEY:-}" ]; then ok "TAVUS_API_KEY already in the file"; else ask_secret v "Tavus API key"; [ -n "$v" ] && put TAVUS_API_KEY "$v"; fi
   say ""
   say "  ${B}Google Docs${N} (transcript archival, no sign-in). On your laptop, in Google Cloud console: a project; APIs & Services > Library:"
-  say "  enable the Google Drive API; IAM & Admin > Service Accounts > Create service account (any name, no roles) > Keys > Add key > JSON:"
-  say "  download the key file and copy it to this host, for example: scp <file>.json $(id -un)@$(hostname -f 2>/dev/null || hostname):~/google-sa.json"
+  say "  enable the Google Drive API; IAM & Admin > Service Accounts > Create service account (any name, no roles) > Keys > Add key > JSON."
+  say "  Open the downloaded key file in a text editor and paste its whole content here when asked (typed text stays hidden)."
   say "  In Google Drive create a folder for transcripts, share it with the service account's e-mail (client_email in the key file) as Editor;"
   say "  the folder id is the part of its URL after /folders/."
-  if [ -n "${GOOGLE_SERVICE_ACCOUNT_FILE:-}" ] && [ -r "${GOOGLE_SERVICE_ACCOUNT_FILE/#\~/$HOME}" ]; then ok "GOOGLE_SERVICE_ACCOUNT_FILE already in the file"; else
-    ask v "Path to the service account key file (Enter to skip)" "${GOOGLE_SERVICE_ACCOUNT_FILE:-}"
-    if [ -n "$v" ]; then v="${v/#\~/$HOME}"; [ -r "$v" ] && { put GOOGLE_SERVICE_ACCOUNT_FILE "$v"; ok "service account $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("client_email","?"))' "$v" 2>/dev/null)"; } || warn "$v is not readable; skipped"; fi
+  local sa_file="$STATE_DIR/google-sa.json"
+  if [ -n "${GOOGLE_SERVICE_ACCOUNT_FILE:-}" ] && [ -r "${GOOGLE_SERVICE_ACCOUNT_FILE/#\~/$HOME}" ]; then
+    ok "service account key already in the file ($(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("client_email","?"))' "${GOOGLE_SERVICE_ACCOUNT_FILE/#\~/$HOME}" 2>/dev/null))"
+  elif [ "$YES" != 1 ]; then
+    say "  Paste the JSON key now and finish with a line containing only }  (or type a path to the file; Enter alone skips):"
+    local buf="" line first=1
+    while IFS= read -rs line; do
+      if [ "$first" = 1 ]; then
+        first=0
+        [ -z "$line" ] && break
+        case "$line" in /*|~*) line="${line/#\~/$HOME}"; [ -r "$line" ] && { put GOOGLE_SERVICE_ACCOUNT_FILE "$line"; ok "service account $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("client_email","?"))' "$line" 2>/dev/null)"; } || warn "$line is not readable; skipped"; buf=""; break;; esac
+      fi
+      buf+="$line"$'\n'
+      [ "$line" = "}" ] && break
+    done
+    echo
+    if [ -n "$buf" ]; then
+      if printf '%s' "$buf" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("client_email") and d.get("private_key")' 2>/dev/null; then
+        printf '%s' "$buf" > "$sa_file" && chmod 600 "$sa_file" && put GOOGLE_SERVICE_ACCOUNT_FILE "$sa_file"
+        ok "service account key saved to $sa_file ($(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["client_email"])' "$sa_file")); share the Drive folder with that address"
+      else
+        warn "that was not a service account key (expected JSON with client_email and private_key); skipped, rerun with: scripts/setup.sh --step 5"
+      fi
+    fi
   fi
   if [ -n "${GOOGLE_DOCS_FOLDER_ID:-}" ]; then ok "GOOGLE_DOCS_FOLDER_ID already in the file"; else ask v "Drive folder id (Enter to skip)" ""; [ -n "$v" ] && put GOOGLE_DOCS_FOLDER_ID "$v"; fi
   if [ "${PROFILE:-}" = remote ]; then

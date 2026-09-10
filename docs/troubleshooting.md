@@ -56,6 +56,8 @@ Symptoms first, then the cause, the command that confirms it, and the fix. Every
 
 **Frontend shows a blank page after the first message.** Cached `index.html` from an older build with a different asset hash. The nginx config serves `index.html` with `no-cache`; hard-refresh once after an upgrade.
 
+**The assistant says "Sorry, I could not reach the knowledge base just now".** The voice agent's fallback when its call to the RAG API fails; the cause is the traceback under `streamed RAG API call failed` in `oc logs deploy/voice-agent`. A `RemoteProtocolError: incomplete chunked read` means the RAG API dropped the stream, and `oc logs deploy/rag-api | grep -A 40 "Exception in ASGI"` shows why. Images before `sha-48e2dab` did this after every request filed from a conversation (the ticket's timestamps were not JSON-serialisable in the stream's final line); since then the agent also retries once with a whole answer before apologising. To exercise the path without a browser: `POST /v1/chat/stream` from the rag-api pod with `{"message": "my laptop is broken", "mode": "voice", "session_id": "check-1"}` must end with one `final` line carrying the ticket.
+
 ## n8n, Slack and Google
 
 **`scripts/import-workflows.sh` fails with 401.** The n8n API key was not set or is the placeholder. Create one under Settings, n8n API, export it as `N8N_API_KEY`.

@@ -6,7 +6,7 @@
 #                               it only stops for values it cannot know (keys, browser work) or on failure
 #   scripts/setup.sh --status   discovery and progress only, changes nothing
 #   scripts/setup.sh --step N   run step N (again), then stop
-#   scripts/setup.sh --yes      skip the optional prompts (n8n API key, Let's Encrypt e-mail)
+#   scripts/setup.sh --yes      never prompt: the keys must already be in ~/secrets.env (Let's Encrypt e-mail skipped)
 #   scripts/setup.sh --reset    forget the saved progress (the cluster is not touched)
 #
 # Without a GPU the script stops and says what the demo needs. To use remote model endpoints

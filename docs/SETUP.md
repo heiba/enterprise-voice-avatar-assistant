@@ -14,7 +14,7 @@ step stops.
 scripts/setup.sh            # discover, show the progress, run every remaining step in order
 scripts/setup.sh --status   # discovery and progress only; changes nothing
 scripts/setup.sh --step 6   # run step 6 (again), then stop
-scripts/setup.sh --yes      # skip the optional prompts (Let's Encrypt e-mail, pasted keys)
+scripts/setup.sh --yes      # never prompt: the keys must already be in ~/secrets.env; the Let's Encrypt e-mail is skipped
 scripts/setup.sh --reset    # forget the saved progress; the cluster is not touched
 scripts/setup.sh --help     # the same list
 ```

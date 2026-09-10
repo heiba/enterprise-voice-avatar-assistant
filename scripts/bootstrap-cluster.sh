@@ -8,12 +8,16 @@
 # Usage: scripts/bootstrap-cluster.sh
 #   PROJECT=voice-avatar-assistant   project created for the assistant (Argo CD managed)
 #   GPU_SLICES=4                     model servers that may share one GPU (1 = exclusive GPUs)
+#   LLM_NAME=llama-32-3b-instruct    InferenceService already deployed on the cluster (prerequisite)
+#   LLM_GPU_FRACTION=0.6             GPU memory share left to that model so Whisper and BGE-M3 fit
 #   INSTALL_MISSING=1                install absent operators from deploy/bootstrap (0 = report only)
 #   LOG_FILE=~/assistant-bootstrap-<timestamp>.log
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT="${PROJECT:-voice-avatar-assistant}"
 GPU_SLICES="${GPU_SLICES:-4}"
+LLM_NAME="${LLM_NAME:-llama-32-3b-instruct}"
+LLM_GPU_FRACTION="${LLM_GPU_FRACTION:-0.6}"
 INSTALL_MISSING="${INSTALL_MISSING:-1}"
 LOG_FILE="${LOG_FILE:-$HOME/assistant-bootstrap-$(date +%Y%m%d-%H%M%S).log}"
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -137,6 +141,32 @@ if [ "$GPU_SLICES" -gt 1 ]; then
     debug "oc get cm device-plugin-config -n nvidia-gpu-operator -o yaml; oc logs -n nvidia-gpu-operator -l app=nvidia-device-plugin-daemonset --tail=30; oc get nodes -L nvidia.com/gpu.replicas"; fi
 else
   ok "GPU sharing off (GPU_SLICES=1); allocatable nvidia.com/gpu = $(oc get nodes -l nvidia.com/gpu.present=true -o jsonpath='{.items[0].status.allocatable.nvidia\.com/gpu}')"
+fi
+
+step "Pre-deployed language model ($LLM_NAME)"
+llm_ns=$(oc get isvc -A -o json 2>/dev/null | jq -r --arg n "$LLM_NAME" '.items[] | select(.metadata.name==$n) | .metadata.namespace' | head -1)
+if [ -z "$llm_ns" ]; then
+  fail "no InferenceService named $LLM_NAME on the cluster; deploy Llama 3.2 3B Instruct from the OpenShift AI model catalog first (SETUP.md prerequisites), or set LLM_NAME"
+  debug "oc get isvc -A"
+else
+  ready=$(oc get isvc "$LLM_NAME" -n "$llm_ns" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')
+  ok "InferenceService $llm_ns/$LLM_NAME (Ready=$ready, url $(oc get isvc "$LLM_NAME" -n "$llm_ns" -o jsonpath='{.status.address.url}'))"
+  pod=$(oc get pods -n "$llm_ns" -l "serving.kserve.io/inferenceservice=$LLM_NAME" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+  args=$(oc get isvc "$LLM_NAME" -n "$llm_ns" -o json | jq -c '.spec.predictor.model.args // []')
+  current=$(printf '%s' "$args" | jq -r '.[] | select(startswith("--gpu-memory-utilization")) | sub("^--gpu-memory-utilization=?";"")' | head -1)
+  info "predictor pod ${pod:-none}; vLLM args $args; GPU memory share ${current:-unset (vLLM default 0.9)}"
+  if [ "$GPU_SLICES" -gt 1 ] && [ "$(printf '%s\n' "${current:-0.9}" "$LLM_GPU_FRACTION" | sort -g | tail -1)" != "$LLM_GPU_FRACTION" ]; then
+    info "lowering the model's GPU memory share to $LLM_GPU_FRACTION so Whisper and BGE-M3 fit next to it"
+    newargs=$(printf '%s' "$args" | jq -c --arg f "--gpu-memory-utilization=$LLM_GPU_FRACTION" '[.[] | select(startswith("--gpu-memory-utilization") | not)] + [$f]')
+    run oc patch isvc "$LLM_NAME" -n "$llm_ns" --type merge -p "{\"spec\":{\"predictor\":{\"model\":{\"args\":$newargs}}}}" >/dev/null
+    llm_ready() { [ "$(oc get isvc "$LLM_NAME" -n "$llm_ns" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')" = "True" ] && [ "$(oc get pods -n "$llm_ns" -l "serving.kserve.io/inferenceservice=$LLM_NAME" --no-headers | grep -c Running)" = "1" ]; }
+    sleep 20
+    if wait_for 900 "$LLM_NAME to restart with the new share" llm_ready; then ok "$LLM_NAME Ready with --gpu-memory-utilization=$LLM_GPU_FRACTION"; else
+      fail "$LLM_NAME did not come back Ready"; debug "oc get pods -n $llm_ns; oc logs -n $llm_ns -l serving.kserve.io/inferenceservice=$LLM_NAME --tail=50"; fi
+  else
+    ok "GPU memory share ${current:-0.9} needs no change"
+  fi
+  info "GPU memory now: $(oc exec -n nvidia-gpu-operator "$(oc get pods -n nvidia-gpu-operator -l app=nvidia-driver-daemonset -o jsonpath='{.items[0].metadata.name}')" -- nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader 2>/dev/null || echo 'nvidia-smi unavailable')"
 fi
 
 step "Argo CD"

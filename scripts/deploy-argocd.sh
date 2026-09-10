@@ -7,8 +7,9 @@
 # Usage: SECRETS_FILE=~/secrets.env scripts/deploy-argocd.sh
 #   PROJECT=voice-avatar-assistant   project prepared by bootstrap-cluster.sh
 #   SECRETS_FILE=<path>              KEY=value file with the API keys (see secrets.env.example)
-#   VALUES_FILE=values-demo-cluster.yaml   values file in chart/ for this cluster
-#                                    (cluster 2: values-demo-cluster-2.yaml)
+#   VALUES_FILE=values-demo-cluster.yaml   values file in chart/
+#   LLM_NAME=llama-32-3b-instruct    InferenceService already on the cluster, used as the language model
+#   LLM_ENDPOINT / LLM_MODEL         override the discovered OpenAI-compatible base URL and model id
 #   REPO_URL=<git url>               fork to deploy from (default: the upstream repository)
 #   TARGET_REVISION=main             branch, tag or commit
 #   DOMAIN=<apps domain>             default: read from the cluster
@@ -21,7 +22,9 @@ PROJECT="${PROJECT:-voice-avatar-assistant}"
 REPO_URL="${REPO_URL:-https://github.com/rh-ai-quickstart/enterprise-voice-avatar-assistant.git}"
 TARGET_REVISION="${TARGET_REVISION:-main}"
 VALUES_FILE="${VALUES_FILE:-values-demo-cluster.yaml}"
+LLM_NAME="${LLM_NAME:-llama-32-3b-instruct}"
 APP=voice-avatar-assistant
+CLUSTER_ENV="$HOME/assistant-cluster.env"
 LOG_FILE="${LOG_FILE:-$HOME/assistant-deploy-$(date +%Y%m%d-%H%M%S).log}"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
@@ -57,6 +60,23 @@ DOMAIN="${DOMAIN:-$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.
 if [ -n "${SECRETS_FILE:-}" ]; then [ -r "$SECRETS_FILE" ] && ok "secrets file $SECRETS_FILE" || { fail "SECRETS_FILE $SECRETS_FILE is not readable"; exit 1; }; else warn "no SECRETS_FILE: integrations stay off unless the secrets already exist"; fi
 if oc get secret livekit-turn-tls -n "$PROJECT" >/dev/null 2>&1; then ok "TURN certificate secret livekit-turn-tls present"; else warn "livekit-turn-tls missing: voice through corporate networks needs it (scripts/setup-turn-tls.sh); LiveKit waits for it"; fi
 
+step "Language model ($LLM_NAME)"
+if [ -z "${LLM_ENDPOINT:-}" ]; then
+  llm_ns=$(oc get isvc -A -o json 2>/dev/null | jq -r --arg n "$LLM_NAME" '.items[] | select(.metadata.name==$n) | .metadata.namespace' | head -1)
+  [ -n "$llm_ns" ] || { fail "no InferenceService named $LLM_NAME (SETUP.md prerequisites); or set LLM_ENDPOINT and LLM_MODEL"; exit 1; }
+  addr=$(oc get isvc "$LLM_NAME" -n "$llm_ns" -o jsonpath='{.status.address.url}')
+  [ -n "$addr" ] || addr="http://${LLM_NAME}-predictor.${llm_ns}.svc.cluster.local:8080"
+  LLM_ENDPOINT="${addr%/}/v1"
+  ok "found $llm_ns/$LLM_NAME at $LLM_ENDPOINT"
+fi
+info "probing $LLM_ENDPOINT/models from inside the cluster"
+models_json=$(oc run llm-probe-$$ -n "$PROJECT" --rm -i --restart=Never --quiet --image=registry.access.redhat.com/ubi9/ubi-minimal:latest -- curl -sk --max-time 20 -H "Authorization: Bearer ${LLM_API_KEY:-none}" "$LLM_ENDPOINT/models" 2>/dev/null || true)
+served=$(printf '%s' "$models_json" | jq -r '.data[0].id // empty' 2>/dev/null)
+if [ -n "$served" ]; then ok "endpoint answers; served model id: $served"; LLM_MODEL="${LLM_MODEL:-$served}"; else
+  warn "no answer from $LLM_ENDPOINT/models (auth or TLS?); using model id ${LLM_MODEL:-$LLM_NAME}"; LLM_MODEL="${LLM_MODEL:-$LLM_NAME}"
+  debug "oc get isvc $LLM_NAME -A -o yaml | grep -A3 -i 'auth\|url'; the chart's test pod re-checks later"; fi
+printf 'DOMAIN=%s\nPROJECT=%s\nVALUES_FILE=%s\nLLM_ENDPOINT=%s\nLLM_MODEL=%s\n' "$DOMAIN" "$PROJECT" "$VALUES_FILE" "$LLM_ENDPOINT" "$LLM_MODEL" > "$CLUSTER_ENV" && ok "cluster facts written to $CLUSTER_ENV (source it for scripts/demo-preflight.sh)"
+
 step "Secrets"
 NAMESPACE="$PROJECT" SECRETS_FILE="${SECRETS_FILE:-}" "$ROOT/scripts/create-secrets.sh" | sed 's/^/  /'
 for key in SLACK_BOT_TOKEN TAVUS_API_KEY GOOGLE_DOCS_FOLDER_ID; do
@@ -67,8 +87,8 @@ step "Argo CD application"
 run oc apply -f "$ROOT/deploy/argocd/appproject.yaml" >/dev/null
 oc patch appproject "$APP" -n openshift-gitops --type merge -p "{\"spec\":{\"sourceRepos\":[\"$REPO_URL\"],\"destinations\":[{\"server\":\"https://kubernetes.default.svc\",\"namespace\":\"$PROJECT\"}]}}" >/dev/null && ok "AppProject allows $REPO_URL -> $PROJECT"
 run oc apply -f "$ROOT/deploy/argocd/application.yaml" >/dev/null
-oc patch application "$APP" -n openshift-gitops --type merge -p "{\"spec\":{\"source\":{\"repoURL\":\"$REPO_URL\",\"targetRevision\":\"$TARGET_REVISION\",\"helm\":{\"valueFiles\":[\"values.yaml\",\"$VALUES_FILE\"],\"parameters\":[{\"name\":\"global.domain\",\"value\":\"$DOMAIN\"}]}},\"destination\":{\"namespace\":\"$PROJECT\"}}}" >/dev/null \
-  && ok "Application $APP: $REPO_URL@$TARGET_REVISION, values $VALUES_FILE, global.domain=$DOMAIN"
+oc patch application "$APP" -n openshift-gitops --type merge -p "{\"spec\":{\"source\":{\"repoURL\":\"$REPO_URL\",\"targetRevision\":\"$TARGET_REVISION\",\"helm\":{\"valueFiles\":[\"values.yaml\",\"$VALUES_FILE\"],\"parameters\":[{\"name\":\"global.domain\",\"value\":\"$DOMAIN\"},{\"name\":\"models.llm.endpoint\",\"value\":\"$LLM_ENDPOINT\"},{\"name\":\"models.llm.servedModelName\",\"value\":\"$LLM_MODEL\"}]}},\"destination\":{\"namespace\":\"$PROJECT\"}}}" >/dev/null \
+  && ok "Application $APP: $REPO_URL@$TARGET_REVISION, values $VALUES_FILE, global.domain=$DOMAIN, llm $LLM_MODEL at $LLM_ENDPOINT"
 oc annotate application "$APP" -n openshift-gitops argocd.argoproj.io/refresh=normal --overwrite >/dev/null
 [ "${WAIT:-1}" = "1" ] || { echo "Application registered (WAIT=0)."; exit 0; }
 
@@ -100,7 +120,7 @@ if oc get isvc -n "$PROJECT" -o name 2>/dev/null | grep -q .; then
     fi
   done
   if models_ready; then ok "all InferenceServices Ready"; oc get isvc -n "$PROJECT" -o custom-columns='NAME:.metadata.name,READY:.status.conditions[?(@.type=="Ready")].status' | sed 's/^/     /'; else
-    fail "models not Ready after 40 min"; debug "oc get pods -n $PROJECT -l component=predictor; oc logs -n $PROJECT -l serving.kserve.io/inferenceservice=llama-3-1-8b-instruct --tail=50; GPU memory: oc exec -n nvidia-gpu-operator ds/nvidia-driver-daemonset -- nvidia-smi"; fi
+    fail "models not Ready after 40 min"; debug "oc get pods -n $PROJECT -l component=predictor; oc logs -n $PROJECT -l serving.kserve.io/inferenceservice=whisper-large-v3-turbo --tail=50; GPU memory: oc exec -n nvidia-gpu-operator ds/nvidia-driver-daemonset -- nvidia-smi"; fi
 else
   warn "no InferenceService in $PROJECT (remote model endpoints?)"
 fi
@@ -117,7 +137,7 @@ done
 printf '  %-9s https://%s\n' "argocd" "$(oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}')"
 if [ "${RUN_TESTS:-0}" = "1" ]; then
   step "Connectivity test pod"
-  NS="$PROJECT" "$ROOT/scripts/test-services.sh" -f "$ROOT/chart/$VALUES_FILE" --set global.domain="$DOMAIN" || FAILED=$((FAILED + 1))
+  NS="$PROJECT" "$ROOT/scripts/test-services.sh" -f "$ROOT/chart/$VALUES_FILE" --set global.domain="$DOMAIN" --set models.llm.endpoint="$LLM_ENDPOINT" --set models.llm.servedModelName="$LLM_MODEL" || FAILED=$((FAILED + 1))
 fi
 echo
 if [ "$FAILED" -gt 0 ]; then echo "Deployment finished with $FAILED problem(s); see the FAIL lines above and the log $LOG_FILE"; exit 1; fi

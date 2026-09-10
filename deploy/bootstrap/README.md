@@ -15,7 +15,8 @@ cluster and needs the platform prerequisites in place:
 Run `scripts/check-prereqs.sh` first. It reports which of these are missing.
 `scripts/bootstrap-cluster.sh` applies these manifests for whatever is absent, waits for
 each operator, configures GPU time-slicing (`instances/gpu-time-slicing.yaml`, replica
-count from `GPU_SLICES`), makes sure KServe is Managed, and creates the project; see
+count from `GPU_SLICES`), makes sure KServe is Managed, lowers the GPU memory share of the
+pre-deployed language model (`LLM_NAME`, `LLM_GPU_FRACTION`), and creates the project; see
 [SETUP.md](../../SETUP.md). `operators/cert-manager.yaml` is required by OpenShift AI 3.x
 and used by `scripts/setup-turn-tls.sh`.
 

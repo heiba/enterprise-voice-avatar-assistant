@@ -27,26 +27,28 @@ operators and model downloads.
 
 ### 1.1 The cluster
 
-The demo cluster is provisioned from the Red Hat Demo Platform (RHDP) catalog item
-**Red Hat OpenShift AI 3**. What it provides, and what this guide assumes:
+This guide always assumes the following environment. Red Hat employees can provision it
+from the Red Hat Demo Platform catalog item
+[Red Hat OpenShift AI 3](https://catalog.demo.redhat.com/catalog/babylon-catalog-prod?item=babylon-catalog-prod/published.openshift-ai-v3.prod);
+anyone else needs a cluster with the same properties.
 
-| Provided by the environment | Detail |
+| Assumed | Detail |
 |---|---|
-| OpenShift Container Platform 4.20 | Single-node OpenShift (SNO) on one AWS GPU instance |
-| Red Hat OpenShift AI 3 | Installed from the `stable-3.x` channel |
-| Supporting operators | cert-manager, Node Feature Discovery, NVIDIA GPU Operator, Red Hat Connectivity Link, installed by following the environment's own guide |
-| KServe | Enabled in the DataScienceCluster (the environment's guide covers this; step 3 verifies and fixes it) |
-| Bastion host | SSH access with `oc` logged in as `kubeadmin`; the provisioning e-mail or Showroom page has the host, user and password |
+| 1. OpenShift Container Platform 4.20, single-node (SNO) | One AWS GPU instance runs everything. OpenShift Lightspeed is enabled on it (not used by the assistant) |
+| 2. Red Hat OpenShift AI 3 | Installed from the `stable-3.x` channel, with KServe enabled and the supporting operators from the environment's own guide: cert-manager, Node Feature Discovery, NVIDIA GPU Operator, Red Hat Connectivity Link |
+| 3. A Llama 3.2 3B Instruct model deployed as `llama-32-3b-instruct` | Deployed from the OpenShift AI model catalog by following the environment's guide. The assistant uses it as its language model; the chart deploys no other LLM on this cluster |
+| 4. A bastion host | SSH access with `oc` logged in as `kubeadmin`. The provisioning e-mail or Showroom page has the host, user and password. Every command in this guide runs there unless it says **laptop** |
 | Instance size | **g6.8xlarge**: 32 vCPU, 128 GB RAM, one NVIDIA L4 with 24 GB. Every `g6.*xlarge` size has a single L4; `g6.12xlarge` and `g6.24xlarge` have four, `g6.48xlarge` eight |
 
 Two properties of the environment shape this guide:
 
-- **One GPU.** The chart normally runs four model servers on four GPUs. Here the GPU
-  Operator's time-slicing advertises the single L4 as four schedulable GPUs, and each vLLM
-  server is given a fixed share of the 24 GB (`chart/values-demo-cluster.yaml`). Granite
-  Guardian does not fit next to the other three, so the guardrail provider is off. With a
-  four-GPU instance, run step 3 with `GPU_SLICES=1` and restore the guardrail settings from
-  `chart/values.yaml`.
+- **One GPU, already partly used.** The deployed Llama 3.2 3B holds the L4 by itself. The GPU
+  Operator's time-slicing advertises the card as four schedulable GPUs so that Whisper and
+  BGE-M3 can join it, and each server gets a fixed share of the 24 GB: the bootstrap script
+  lowers the deployed model's share to 60% and the chart gives Whisper 15% and BGE-M3 12%
+  (`chart/values-demo-cluster.yaml`). Granite Guardian does not fit, so the guardrail provider
+  is off. With a four-GPU instance, run step 3 with `GPU_SLICES=1` and restore the guardrail
+  and LLM settings from `chart/values.yaml`.
 - **Auto-stop after six hours, auto-destroy after 48.** Disable auto-stop in RHDP if you keep
   the environment (the catalog item warns about stop/start problems), and expect to redo
   everything on a new cluster; section 10 is the checklist for that.
@@ -54,14 +56,15 @@ Two properties of the environment shape this guide:
 Verify the starting point on the **bastion** before anything else:
 
 ```bash
-oc whoami && oc get clusterversion version -o jsonpath='OpenShift {.status.desired.version}{"\n"}' && oc get nodes -L node.kubernetes.io/instance-type,nvidia.com/gpu.count && oc get csv -A | grep -E 'rhods|gpu-operator|nfd|cert-manager|gitops' && oc get datasciencecluster -o jsonpath='{range .items[*]}{.metadata.name} kserve={.spec.components.kserve.managementState}{"\n"}{end}'
+oc whoami && oc get clusterversion version -o jsonpath='OpenShift {.status.desired.version}{"\n"}' && oc get nodes -L node.kubernetes.io/instance-type,nvidia.com/gpu.count && oc get csv -A | grep -E 'rhods|gpu-operator|nfd|cert-manager|gitops' && oc get datasciencecluster -o jsonpath='{range .items[*]}{.metadata.name} kserve={.spec.components.kserve.managementState}{"\n"}{end}' && oc get isvc -A
 ```
 
 Expected: `kubeadmin`, OpenShift 4.20.x, one node with `nvidia.com/gpu.count` 1 and the
 `g6.8xlarge` instance type, `rhods-operator` 3.x with the GPU, NFD and cert-manager CSVs in
-`Succeeded`, and a DataScienceCluster with `kserve=Managed`. GitOps may be missing; step 3
-installs it. If OpenShift AI shows a 2.x version, this is not the expected environment: 3.x
-is required and step 3 stops.
+`Succeeded`, a DataScienceCluster with `kserve=Managed`, and an InferenceService
+`llama-32-3b-instruct` with `READY True`. GitOps may be missing; step 3 installs it. If
+OpenShift AI shows a 2.x version, or the model is missing, this is not the expected
+environment: finish the environment's own guide first.
 
 ### 1.2 Accounts
 
@@ -118,7 +121,7 @@ show why, and the whole output is also written to `~/assistant-bootstrap-<timest
 On the **bastion**:
 
 ```bash
-cd ~/enterprise-voice-avatar-assistant && GPU_SLICES=4 PROJECT=voice-avatar-assistant scripts/bootstrap-cluster.sh
+cd ~/enterprise-voice-avatar-assistant && GPU_SLICES=4 LLM_GPU_FRACTION=0.6 PROJECT=voice-avatar-assistant scripts/bootstrap-cluster.sh
 ```
 
 What each step does and what to expect:
@@ -130,17 +133,19 @@ What each step does and what to expect:
 | 3 OpenShift AI components | Sets `kserve` to Managed if it is not, waits for the DataScienceCluster and the KServe controller | `DataScienceCluster default-dsc Ready` | 1 to 5 min |
 | 4 NFD instance | Creates the NodeFeatureDiscovery if absent, waits for the GPU node label | GPU node listed | seconds |
 | 5 GPU Operator | Creates the ClusterPolicy if absent, waits for it, applies the time-slicing ConfigMap and points the ClusterPolicy at it, waits until the node advertises `GPU_SLICES` GPUs | `allocatable nvidia.com/gpu = 4` | 1 to 10 min |
-| 6 Argo CD | Waits for the Argo CD server, prints its URL | URL | 1 min |
-| 7 Project | Creates `voice-avatar-assistant`, labels it for Argo CD, applies the AppProject | `OK` | seconds |
-| 8 Summary | Runs `scripts/check-prereqs.sh` | `All required checks passed` | seconds |
+| 6 Language model | Finds `llama-32-3b-instruct`, prints its vLLM arguments, and if its GPU memory share is above `LLM_GPU_FRACTION` (0.6) patches the InferenceService and waits for the model to come back Ready | `Ready with --gpu-memory-utilization=0.6`, then the GPU memory in use | 2 to 5 min |
+| 7 Argo CD | Waits for the Argo CD server, prints its URL | URL | 1 min |
+| 8 Project | Creates `voice-avatar-assistant`, labels it for Argo CD, applies the AppProject | `OK` | seconds |
+| 9 Summary | Runs `scripts/check-prereqs.sh` | `All required checks passed` | seconds |
 
 Verify afterwards:
 
 ```bash
-oc get nodes -L nvidia.com/gpu.replicas -o custom-columns='NAME:.metadata.name,GPUS:.status.allocatable.nvidia\.com/gpu,REPLICAS:.metadata.labels.nvidia\.com/gpu\.replicas' && oc get clusterpolicy -o jsonpath='ClusterPolicy {.items[0].status.state}{"\n"}' && oc get namespace voice-avatar-assistant --show-labels
+oc get nodes -o custom-columns='NAME:.metadata.name,GPUS:.status.allocatable.nvidia\.com/gpu,REPLICAS:.metadata.labels.nvidia\.com/gpu\.replicas' && oc get clusterpolicy -o jsonpath='ClusterPolicy {.items[0].status.state}{"\n"}' && oc get isvc -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,READY:.status.conditions[?(@.type=="Ready")].status,ARGS:.spec.predictor.model.args' && oc get namespace voice-avatar-assistant --show-labels
 ```
 
-Expected: `GPUS 4`, `REPLICAS 4`, `ClusterPolicy ready`, the namespace with
+Expected: `GPUS 4`, `REPLICAS 4`, `ClusterPolicy ready`, the model `Ready True` with
+`--gpu-memory-utilization=0.6` among its arguments, the namespace with
 `argocd.argoproj.io/managed-by=openshift-gitops`.
 
 If GPU sharing does not appear, the device plugin has not picked up the ConfigMap:
@@ -274,56 +279,52 @@ LiveKit and the n8n encryption key are generated. Check that nothing is quoted o
 grep -v '^#' ~/secrets.env | grep -v '^$' | sed 's/=.*/=<set>/'
 ```
 
-### 5.6 Which values file: one per cluster
+### 5.6 The values file
 
-Two demo clusters run side by side, and each has its own values file in the repository so
-they can differ (instance size, faces, voices) without affecting each other:
-
-| Cluster | Values file | Deploy with |
-|---|---|---|
-| Demo cluster 1 | `chart/values-demo-cluster.yaml` | `VALUES_FILE=values-demo-cluster.yaml` (the default) |
-| Demo cluster 2 | `chart/values-demo-cluster-2.yaml` | `VALUES_FILE=values-demo-cluster-2.yaml` |
-
-The files start identical. Neither contains anything cluster-specific: the apps domain is
-passed by the deploy script, and every key lives in `~/secrets.env` on that cluster's bastion.
-CI keeps both files up to date: every image build writes the new tags into every
-`chart/values-demo-cluster*.yaml`, so both clusters follow `main`. A third cluster is a
-third copy of the file, picked up by CI automatically. Keep a note of which cluster uses
-which file; the deploy script prints the file it registered, and
-`oc get application voice-avatar-assistant -n openshift-gitops -o jsonpath='{.spec.source.helm.valueFiles}'`
-shows it later.
+`chart/values-demo-cluster.yaml` is the values file for this environment: images from Quay,
+Tavus with four faces, Whisper and BGE-M3 with their GPU shares, guardrails off, TURN on.
+It contains nothing cluster-specific: the apps domain and the endpoint of the deployed
+language model are passed by the deploy script, and every key lives in `~/secrets.env`. CI
+writes new image tags into it after every build, so the cluster follows `main`.
 
 ## 6. Deploy with Argo CD
 
-One script creates the secrets from the file, registers the Argo CD application with the
-cluster's apps domain and values file, and waits for the sync, the models and the pods. Its
-output goes to `~/assistant-deploy-<timestamp>.log` too. On the **bastion** of cluster 1:
+One script finds the deployed language model, creates the secrets from the file, registers
+the Argo CD application with the cluster's apps domain and the model endpoint, and waits
+for the sync, the models and the pods. Its output goes to `~/assistant-deploy-<timestamp>.log`
+too. On the **bastion**:
 
 ```bash
-cd ~/enterprise-voice-avatar-assistant && SECRETS_FILE=~/secrets.env VALUES_FILE=values-demo-cluster.yaml RUN_TESTS=1 scripts/deploy-argocd.sh
+cd ~/enterprise-voice-avatar-assistant && SECRETS_FILE=~/secrets.env RUN_TESTS=1 scripts/deploy-argocd.sh
 ```
-
-On the bastion of cluster 2, the same command with `VALUES_FILE=values-demo-cluster-2.yaml`.
 
 What happens:
 
 | Step | Action | Expected | Time |
 |---|---|---|---|
-| 1 Checks | Login, project, Argo CD, apps domain, secrets file, TURN secret | `OK` lines; a `WARN` if the TURN secret is missing | seconds |
-| 2 Secrets | `scripts/create-secrets.sh` with the file; existing secrets are kept | `created assistant-…` six times, then `SLACK_BOT_TOKEN set` etc. | seconds |
-| 3 Application | Applies `deploy/argocd/`, sets the repository, branch, values file and `global.domain` on the application | `Application voice-avatar-assistant: … values values-demo-cluster.yaml, global.domain=apps.…` | seconds |
-| 4 Sync | Waits for `Synced/Healthy`, printing unhealthy resources every minute | `application Synced/Healthy` | 5 to 20 min |
-| 5 Models | Waits for the three InferenceServices; the first start downloads about 10 GB of weights | `all InferenceServices Ready` | 10 to 20 min |
-| 6 Pods | Waits for every pod | `all pods Running or Completed` | with the above |
-| 7 URLs | Prints the frontend, n8n, LiveKit, Qdrant and Argo CD URLs | URLs | |
-| 8 Tests | With `RUN_TESTS=1`, the connectivity test pod calls every model and store | every check `OK` | 1 min |
+| 1 Checks | Login, project, Argo CD, apps domain, values file, secrets file, TURN secret | `OK` lines; a `WARN` if the TURN secret is missing | seconds |
+| 2 Language model | Finds `llama-32-3b-instruct`, builds its in-cluster URL, asks it for its model list from inside the cluster, writes `~/assistant-cluster.env` | `endpoint answers; served model id: …` | seconds |
+| 3 Secrets | `scripts/create-secrets.sh` with the file; existing secrets are kept | `created assistant-…` six times, then `SLACK_BOT_TOKEN set` etc. | seconds |
+| 4 Application | Applies `deploy/argocd/`, sets the repository, branch, values file, `global.domain` and the model endpoint on the application | `Application voice-avatar-assistant: … llm … at http://…` | seconds |
+| 5 Sync | Waits for `Synced/Healthy`, printing unhealthy resources every minute | `application Synced/Healthy` | 5 to 15 min |
+| 6 Models | Waits for the Whisper and BGE-M3 InferenceServices; the first start downloads about 3 GB of weights | `all InferenceServices Ready` | 5 to 10 min |
+| 7 Pods | Waits for every pod | `all pods Running or Completed` | with the above |
+| 8 URLs | Prints the frontend, n8n, LiveKit, Qdrant and Argo CD URLs | URLs | |
+| 9 Tests | With `RUN_TESTS=1`, the connectivity test pod calls every model and store | every check `OK` | 1 min |
 
-The models share one GPU. If an InferenceService stays not Ready, look at its pod log and at
-the GPU memory: `oc logs -n voice-avatar-assistant -l serving.kserve.io/inferenceservice=<name> --tail=50`
+The models share one GPU with the deployed Llama 3.2 3B. If an InferenceService stays not
+Ready, look at its pod log and at the GPU memory:
+`oc logs -n voice-avatar-assistant -l serving.kserve.io/inferenceservice=<name> --tail=50`
 and `oc exec -n nvidia-gpu-operator ds/nvidia-driver-daemonset -- nvidia-smi`. A vLLM message
 such as "Free memory on device … is less than desired GPU memory utilization" means the
-shares in `chart/values-demo-cluster.yaml` add up to more than the card has left; lower
-`--gpu-memory-utilization` for the model that fails.
+shares add up to more than the card has left: the deployed model's share (bootstrap,
+`LLM_GPU_FRACTION`) plus Whisper and BGE-M3 (`chart/values-demo-cluster.yaml`) must stay
+below about 90%.
+
+If step 2 warns that the model endpoint did not answer, the model was deployed with token
+authentication or serves TLS. Put the token in `~/secrets.env` as `LLM_API_KEY`, or pass the
+right URL with `LLM_ENDPOINT=https://…/v1` (the services trust the OpenShift service CA), and
+run the deploy script again.
 
 Verify from the **laptop**: open the frontend URL, type a question such as *How often must
 administrator passwords be rotated?* and expect "I could not find it in the company
@@ -367,10 +368,11 @@ lists the indexed documents with a hit for the password policy.
 Full pre-demo check, the same one used before every demo:
 
 ```bash
-cd ~/enterprise-voice-avatar-assistant && NS=voice-avatar-assistant scripts/demo-preflight.sh -f chart/values-demo-cluster.yaml --set global.domain=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
+cd ~/enterprise-voice-avatar-assistant && . ~/assistant-cluster.env && NS=$PROJECT scripts/demo-preflight.sh -f chart/$VALUES_FILE --set global.domain=$DOMAIN --set models.llm.endpoint=$LLM_ENDPOINT --set models.llm.servedModelName=$LLM_MODEL
 ```
 
-On cluster 2, use `-f chart/values-demo-cluster-2.yaml`.
+`~/assistant-cluster.env` is written by the deploy script with the domain, the values file and
+the model endpoint, so these commands need no retyping.
 
 Then walk through [docs/demo-script.md](docs/demo-script.md) once from the **laptop**: a
 cited text answer, a voice session with the avatar (the browser asks for the microphone),
@@ -380,9 +382,8 @@ Google Doc.
 ## 9. Day-two changes
 
 - **Application updates.** Every push to `main` that touches the services builds images and
-  commits their tags into every `chart/values-demo-cluster*.yaml`; Argo CD on both clusters
-  syncs within minutes. `oc get application voice-avatar-assistant -n openshift-gitops`
-  shows the state.
+  commits their tags into `chart/values-demo-cluster.yaml`; Argo CD syncs within minutes.
+  `oc get application voice-avatar-assistant -n openshift-gitops` shows the state.
 - **A changed key.** Edit `~/secrets.env`, rewrite only that secret, and restart the pods that
   read it:
 
@@ -391,10 +392,9 @@ Google Doc.
   ```
 
   Never use `FORCE=1` on a running cluster: it regenerates the database and n8n passwords.
-- **Chart values** (faces, voices, model sizes). Argo CD deploys what is in git, so the
-  change is a commit to that cluster's values file on `main` (`values-demo-cluster.yaml` or
-  `values-demo-cluster-2.yaml`), or on a fork: run the deploy script again with
-  `REPO_URL=<fork url>` and it re-points the application.
+- **Chart values** (faces, voices, model shares). Argo CD deploys what is in git, so the
+  change is a commit to `chart/values-demo-cluster.yaml` on `main`, or on a fork: run the
+  deploy script again with `REPO_URL=<fork url>` and it re-points the application.
 - **Workflows.** After editing `chart/files/n8n-workflows/`, re-import on the bastion with
   `N8N_URL=https://<n8n host> N8N_API_KEY=… scripts/import-workflows.sh`; credentials attached
   in the editor survive the re-import.
@@ -403,12 +403,14 @@ Google Doc.
 
 After the environment is destroyed and a new one provisioned:
 
-1. **Bastion:** section 2 (clone), section 3 (bootstrap), section 4 (TURN), then
-   `nano ~/secrets.env` is only needed if a key changed.
+1. **Bastion:** section 2 (clone), section 3 (bootstrap, which also resizes the deployed
+   model's GPU share), section 4 (TURN), then `nano ~/secrets.env` is only needed if a key
+   changed. The environment's own guide must have been followed first, so that OpenShift AI
+   and `llama-32-3b-instruct` are there.
 2. **Laptop:** the apps domain changed, so update the two URLs that contain it: the Slack
    app's request URL under **Interactivity & Shortcuts**, and the Google OAuth client's
    redirect URI under **Credentials**. Tokens, keys and the Drive folder stay valid.
-3. **Bastion:** section 6 (deploy, with the `VALUES_FILE` of that cluster), section 8 (documents).
+3. **Bastion:** section 6 (deploy), section 8 (documents).
 4. **Laptop:** section 7 (n8n owner account, Google credential, publish WF5).
 
 About 90 minutes, most of it the model download.

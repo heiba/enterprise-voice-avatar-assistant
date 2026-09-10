@@ -1,10 +1,9 @@
-# Values for demo cluster 1, a Red Hat Demo Platform "Red Hat OpenShift AI 3" environment,
-# single-node OpenShift 4.20 on one AWS g6 instance with a single NVIDIA L4 (24 GB).
-# Cluster 2 has its own file, values-demo-cluster-2.yaml; scripts/deploy-argocd.sh picks the
-# file with VALUES_FILE.
-# SETUP.md walks through the whole setup. The cluster's apps domain is not stored here:
-# scripts/deploy-argocd.sh passes global.domain to the Argo CD application from the cluster
-# it is logged in to, so this file works unchanged on the next cluster.
+# Values for the demo cluster: a Red Hat Demo Platform "Red Hat OpenShift AI 3" environment,
+# single-node OpenShift 4.20 on one AWS g6 instance with a single NVIDIA L4 (24 GB), with a
+# Llama 3.2 3B Instruct model already deployed as llama-32-3b-instruct. SETUP.md walks
+# through the whole setup. Nothing cluster-specific is stored here: scripts/deploy-argocd.sh
+# passes the apps domain and the endpoint of the deployed model to the Argo CD application
+# from the cluster it is logged in to, so this file works unchanged on the next cluster.
 #
 # Application images are built by .github/workflows/build-images.yaml and pushed to
 # quay.io/rh-ai-quickstart. The workflow rewrites the per-service image references below
@@ -43,19 +42,19 @@ ingestion:
   enabled: true
   image: quay.io/rh-ai-quickstart/enterprise-voice-avatar-assistant-ingestion:sha-2f926ec
 
-# One L4 shared by three vLLM servers through GPU time-slicing (scripts/bootstrap-cluster.sh,
-# GPU_SLICES=4 advertises the card as four nvidia.com/gpu). Each server gets a fixed share of
-# the 24 GB; the shares add up to 72% to leave room for the CUDA context of each process.
-# Granite Guardian does not fit next to them, so the guardrail provider is off on this cluster.
+# The language model is the Llama 3.2 3B Instruct already served on the cluster
+# (llama-32-3b-instruct, a prerequisite in SETUP.md). scripts/deploy-argocd.sh finds it and
+# sets models.llm.endpoint and models.llm.servedModelName on the Argo CD application; the
+# values below are placeholders that keep the chart renderable on its own.
+# Whisper and BGE-M3 share the single L4 with that model through GPU time-slicing
+# (scripts/bootstrap-cluster.sh, GPU_SLICES=4) and fixed memory shares; the bootstrap
+# script lowers the deployed model's share to LLM_GPU_FRACTION (0.6) so all three fit.
+# Granite Guardian does not fit as well, so the guardrail provider is off on this cluster.
 models:
   llm:
-    args:
-      - --max-model-len=8192
-      - --gpu-memory-utilization=0.45
-      - --max-num-seqs=8
-      - --enforce-eager
-      - --enable-auto-tool-choice
-      - --tool-call-parser=llama3_json
+    deploy: false
+    servedModelName: llama-32-3b-instruct
+    endpoint: http://llama-32-3b-instruct-predictor.CLUSTER-PROJECT.svc.cluster.local:8080/v1
   stt:
     deploy: true
     args:

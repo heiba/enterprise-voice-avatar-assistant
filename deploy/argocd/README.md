@@ -28,7 +28,7 @@ cluster in sync with the `main` branch. It needs the OpenShift GitOps operator
    `openshift-gitops` namespace) or with `oc get applications.argoproj.io -n openshift-gitops`.
 
 `application.yaml` points at `values.yaml` plus `values-demo-cluster.yaml`;
-`scripts/deploy-argocd.sh` replaces the second file with `VALUES_FILE` (one file per
-cluster, `values-demo-cluster-2.yaml` for the second demo cluster) and sets
-`global.domain` as a Helm parameter, so no domain is stored in git. To deploy a
-different branch or a fork, pass `TARGET_REVISION` and `REPO_URL` to the script.
+`scripts/deploy-argocd.sh` sets `global.domain`, `models.llm.endpoint` and
+`models.llm.servedModelName` as Helm parameters from the cluster it is logged in to,
+so nothing cluster-specific is stored in git. To deploy a different branch, a fork or
+another values file, pass `TARGET_REVISION`, `REPO_URL` or `VALUES_FILE` to the script.

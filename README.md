@@ -263,12 +263,12 @@ repository.
 3. Run the setup and follow it:
 
    ```bash
-   ./setup.sh
+   scripts/setup.sh
    ```
 
    It prints the state of the cluster and of every step, then offers the next one. Press
-   Enter to run it, type a number to run a specific step, `q` to leave. `./setup.sh --status`
-   only shows the state; `./setup.sh --step N` runs one step again; `./setup.sh --yes` accepts
+   Enter to run it, type a number to run a specific step, `q` to leave. `scripts/setup.sh --status`
+   only shows the state; `scripts/setup.sh --step N` runs one step again; `scripts/setup.sh --yes` accepts
    every suggested answer. Progress and discovered facts are in `~/.assistant-setup/state.env`,
    logs of each step in `~/.assistant-setup/logs/`.
 
@@ -305,14 +305,14 @@ it holds no domain, no endpoint and no key.
 
 - **Application updates.** Every push to `main` that touches the services builds images and
   commits their tags into `chart/values-demo-cluster.yaml`; Argo CD syncs within minutes.
-- **A changed key.** Edit `~/secrets.env`, then `./setup.sh --step 5` (rewrites the
+- **A changed key.** Edit `~/secrets.env`, then `scripts/setup.sh --step 5` (rewrites the
   integrations secret, passwords are kept) and `oc rollout restart deployment/n8n deployment/rag-api deployment/voice-agent -n voice-avatar-assistant`.
 - **Chart values** (faces, voices, model shares) are commits to `chart/values-demo-cluster.yaml`;
   `scripts/deploy-argocd.sh` accepts `REPO_URL` and `TARGET_REVISION` for a fork or a branch.
 - **Workflows.** After editing `chart/files/n8n-workflows/`, re-import with
   `N8N_URL=<n8n url> N8N_API_KEY=… scripts/import-workflows.sh`; credentials attached in the
   editor survive.
-- **Next cluster.** Clone, `./setup.sh`, and update the two external URLs that contain the
+- **Next cluster.** Clone, `scripts/setup.sh`, and update the two external URLs that contain the
   cluster domain: the Slack app's request URL under Interactivity & Shortcuts, and the Google
   OAuth client's redirect URI. Tokens, keys and the Drive folder stay valid.
 
@@ -356,7 +356,7 @@ PROJECT=voice-avatar-assistant scripts/deploy.sh
 
 **Manual Helm steps.** Secrets, `helm install`, per-model options and the n8n workflows step by step: [docs/deployment.md](docs/deployment.md#manual-installation-with-helm).
 
-**Argo CD.** The same chart driven by the OpenShift GitOps operator: this is what [Setup](#setup) does with `setup.sh`; the manual steps are in [docs/deployment.md](docs/deployment.md#deploying-with-argo-cd).
+**Argo CD.** The same chart driven by the OpenShift GitOps operator: this is what [Setup](#setup) does with `scripts/setup.sh`; the manual steps are in [docs/deployment.md](docs/deployment.md#deploying-with-argo-cd).
 
 The generated secrets, how to read, rotate and back them up, are described in [docs/deployment.md](docs/deployment.md#working-with-the-generated-secrets).
 

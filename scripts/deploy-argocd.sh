@@ -145,4 +145,4 @@ if [ "${RUN_TESTS:-0}" = "1" ]; then
 fi
 echo
 if [ "$FAILED" -gt 0 ]; then echo "Deployment finished with $FAILED problem(s); see the FAIL lines above and the log $LOG_FILE"; exit 1; fi
-echo "Deployment complete. Next: n8n first run and the sample documents (./setup.sh)."
+echo "Deployment complete. Next: n8n first run and the sample documents (scripts/setup.sh)."

@@ -188,4 +188,4 @@ step "Summary"
 NAMESPACE="$PROJECT" "$ROOT/scripts/check-prereqs.sh" || FAILED=$((FAILED + 1))
 echo
 if [ "$FAILED" -gt 0 ]; then echo "Bootstrap finished with $FAILED problem(s); see the FAIL lines above and the log $LOG_FILE"; exit 1; fi
-echo "Bootstrap complete. Next: scripts/setup-turn-tls.sh, then scripts/deploy-argocd.sh, or simply ./setup.sh."
+echo "Bootstrap complete. Next: scripts/setup-turn-tls.sh, then scripts/deploy-argocd.sh, or simply scripts/setup.sh."

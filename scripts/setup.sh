@@ -2,17 +2,17 @@
 # Interactive, resumable setup of the demo on a fresh cluster. Runs on the bastion host,
 # logged in to the cluster as an administrator, from a clone of this repository.
 #
-#   ./setup.sh            discover the cluster, show progress, run the next step (asks first)
-#   ./setup.sh --status   discovery and progress only, changes nothing
-#   ./setup.sh --step N   run step N (again)
-#   ./setup.sh --yes      accept every suggested answer (manual steps still ask for confirmation)
-#   ./setup.sh --reset    forget the saved progress (the cluster is not touched)
+#   scripts/setup.sh            discover the cluster, show progress, run the next step (asks first)
+#   scripts/setup.sh --status   discovery and progress only, changes nothing
+#   scripts/setup.sh --step N   run step N (again)
+#   scripts/setup.sh --yes      accept every suggested answer (manual steps still ask for confirmation)
+#   scripts/setup.sh --reset    forget the saved progress (the cluster is not touched)
 #
 # Progress and discovered facts are kept in ~/.assistant-setup/state.env, logs in
 # ~/.assistant-setup/logs/. Every step checks the cluster before doing anything, so work
 # done by hand or by an earlier run is recognised and not repeated.
 set -uo pipefail
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STATE_DIR="${STATE_DIR:-$HOME/.assistant-setup}"
 STATE="$STATE_DIR/state.env"
 SECRETS_FILE="${SECRETS_FILE:-$HOME/secrets.env}"
@@ -185,7 +185,7 @@ step3() {
   say "  running scripts/bootstrap-cluster.sh with GPU_SLICES=$slices LLM_GPU_FRACTION=$frac (log $log)"
   confirm "Continue?" || return 1
   PROJECT="$PROJECT" GPU_SLICES="$slices" LLM_NAME="${LLM_NS:+$LLM_NAME}" LLM_GPU_FRACTION="$frac" LOG_FILE="$log" "$ROOT/scripts/bootstrap-cluster.sh" && { mark 3; return 0; }
-  bad "bootstrap reported problems; see $log, fix, and run: ./setup.sh --step 3"; return 1
+  bad "bootstrap reported problems; see $log, fix, and run: scripts/setup.sh --step 3"; return 1
 }
 step4() {
   say "${B}Step 4: TURN certificate${N} (voice through corporate networks needs TURN over TLS with a trusted certificate)"
@@ -193,7 +193,7 @@ step4() {
   if PROJECT="$PROJECT" "$ROOT/scripts/setup-turn-tls.sh" copy; then mark 4; return 0; fi
   warn "the cluster's wildcard certificate cannot be used; cert-manager can request one from Let's Encrypt (the apps domain must be reachable from the internet)"
   ask ACME_EMAIL "E-mail for Let's Encrypt (empty to skip TURN for now)" "${ACME_EMAIL:-}"
-  [ -n "$ACME_EMAIL" ] || { warn "TURN skipped; voice works on open networks only. Rerun: ./setup.sh --step 4"; return 0; }
+  [ -n "$ACME_EMAIL" ] || { warn "TURN skipped; voice works on open networks only. Rerun: scripts/setup.sh --step 4"; return 0; }
   save ACME_EMAIL "$ACME_EMAIL"
   PROJECT="$PROJECT" ACME_EMAIL="$ACME_EMAIL" "$ROOT/scripts/setup-turn-tls.sh" cert-manager && mark 4
 }
@@ -225,7 +225,7 @@ step5() {
     for k in LLM_API_KEY STT_API_KEY EMBEDDINGS_API_KEY; do if [ -n "${!k:-}" ]; then ok "$k already in the file"; else ask_secret v "$k"; [ -n "$v" ] && put "$k" "$v"; fi; done
   fi
   say ""; say "  keys present in $SECRETS_FILE:"; grep -v '^#' "$SECRETS_FILE" | grep -v '=$' | grep -v '^$' | sed 's/=.*/=<set>/' | sed 's/^/     /'
-  note "edit the file at any time with: nano $SECRETS_FILE ; the deploy step (6) applies it. Changed a key later? ./setup.sh --step 5 then --step 6."
+  note "edit the file at any time with: nano $SECRETS_FILE ; the deploy step (6) applies it. Changed a key later? scripts/setup.sh --step 5 then --step 6."
   if [ "$SECRETS_IN_CLUSTER" = yes ]; then
     confirm "Rewrite the integrations secret in the cluster from the file now (passwords are kept)?" && NAMESPACE="$PROJECT" SECRETS_FILE="$SECRETS_FILE" REFRESH=assistant-integrations,assistant-models "$ROOT/scripts/create-secrets.sh" | sed 's/^/  /'
   fi
@@ -243,7 +243,7 @@ step6() {
   # shellcheck disable=SC1090
   set -a; [ -f "$SECRETS_FILE" ] && . "$SECRETS_FILE"; set +a
   env PROJECT="$PROJECT" SECRETS_FILE="$SECRETS_FILE" VALUES_OBJECT_FILE="$STATE_DIR/values-object.json" LLM_NAME="$LLM_NAME" LOG_FILE="$log" RUN_TESTS=1 "${llm_env[@]}" "$ROOT/scripts/deploy-argocd.sh" && { mark 6; return 0; }
-  bad "deployment reported problems; see $log, fix, and run: ./setup.sh --step 6"; return 1
+  bad "deployment reported problems; see $log, fix, and run: scripts/setup.sh --step 6"; return 1
 }
 step7() {
   say "${B}Step 7: n8n first run${N} (browser, on your laptop)"
@@ -259,7 +259,7 @@ step7() {
     local wf; wf=$(curl -s --max-time 20 -H "X-N8N-API-KEY: $(cat "$STATE_DIR/n8n.key")" "$N8N_URL/api/v1/workflows?limit=50" | jq -r '.data[]? | "\(.active) \(.name)"' 2>/dev/null)
     if [ -n "$wf" ]; then
       printf '%s\n' "$wf" | sed 's/^true /  active   /; s/^false /  INACTIVE /'
-      if printf '%s\n' "$wf" | grep -q '^false'; then warn "inactive workflows above: attach the missing credential in the editor and publish, then run: ./setup.sh --step 7"; return 1; fi
+      if printf '%s\n' "$wf" | grep -q '^false'; then warn "inactive workflows above: attach the missing credential in the editor and publish, then run: scripts/setup.sh --step 7"; return 1; fi
       ok "all workflows active"; mark 7; return 0
     fi
     warn "could not list workflows with that key (wrong key, or n8n not reachable from here)"
@@ -286,8 +286,8 @@ step9() {
   if NS="$PROJECT" "$ROOT/scripts/demo-preflight.sh" -f "$ROOT/chart/values-demo-cluster.yaml" "${extra[@]}" --set "global.domain=$DOMAIN" "${llm_set[@]}"; then
     mark 9; say ""; say "  ${G}Ready for the demo.${N}"; say "  frontend $FRONTEND_URL"; say "  n8n      $N8N_URL"
     say "  Walk through docs/demo-script.md: a cited text answer, a voice session (the browser asks for the microphone), a request by voice with its Slack card, the archive button."
-    say "  Next cluster: clone, ./setup.sh; update the Slack request URL and the Google redirect URI with the new domain (they contain it)."
-  else bad "preflight reported problems (docs/troubleshooting.md); fix and run: ./setup.sh --step 9"; return 1; fi
+    say "  Next cluster: clone, scripts/setup.sh; update the Slack request URL and the Google redirect URI with the new domain (they contain it)."
+  else bad "preflight reported problems (docs/troubleshooting.md); fix and run: scripts/setup.sh --step 9"; return 1; fi
 }
 
 # ---------------------------------------------------------------- main ----------------------
@@ -295,10 +295,10 @@ command -v jq >/dev/null || { echo "jq is required: sudo dnf install -y jq"; exi
 discover; show_status
 case "$MODE" in
 status) exit 0 ;;
-step) [ -n "$ONLY" ] || { echo "usage: ./setup.sh --step N"; exit 1; }; "step$ONLY"; rc=$?; discover; show_status; exit $rc ;;
+step) [ -n "$ONLY" ] || { echo "usage: scripts/setup.sh --step N"; exit 1; }; "step$ONLY"; rc=$?; discover; show_status; exit $rc ;;
 esac
 while :; do
-  [ -n "$NEXT" ] || { say "  ${G}Every step is done.${N} ./setup.sh --step N runs one again."; exit 0; }
+  [ -n "$NEXT" ] || { say "  ${G}Every step is done.${N} scripts/setup.sh --step N runs one again."; exit 0; }
   say "  Next: step $NEXT, ${STEPS[$((NEXT-1))]}."
   if [ "$YES" = 1 ]; then ans=""; else read -r -p "  Enter to run it, a number to run another step, q to quit: " ans; fi
   case "$ans" in q|Q) exit 0;; [1-9]) step="$ans";; "") step="$NEXT";; *) continue;; esac

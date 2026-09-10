@@ -114,10 +114,11 @@ step "Node Feature Discovery instance"
 if oc get nodefeaturediscovery -n openshift-nfd -o name 2>/dev/null | grep -q .; then ok "NodeFeatureDiscovery exists"; else
   if [ "$INSTALL_MISSING" = "1" ]; then run oc apply -f "$ROOT/deploy/bootstrap/instances/nfd-instance.yaml" >/dev/null; else fail "no NodeFeatureDiscovery instance (deploy/bootstrap/instances/nfd-instance.yaml)"; fi
 fi
-# NFD labels nodes with an NVIDIA PCI device (vendor 10de); the nvidia.com/* labels come later from the GPU operator
-gpu_labelled() { oc get nodes -l feature.node.kubernetes.io/pci-10de.present=true -o name 2>/dev/null | grep -q .; }
-if wait_for 600 "NFD to label the GPU node" gpu_labelled; then ok "nodes with an NVIDIA device: $(oc get nodes -l feature.node.kubernetes.io/pci-10de.present=true -o name | tr '\n' ' ')"; else
-  fail "no node carries feature.node.kubernetes.io/pci-10de.present=true"; debug "oc get pods -n openshift-nfd; oc get nodefeaturediscovery -n openshift-nfd -o yaml | tail -20"; fi
+# NFD labels nodes with an NVIDIA PCI device (vendor 10de); on clusters where the GPU operator
+# already labelled the node (nvidia.com/gpu.present, nvidia.com/gpu.count) that is enough too
+gpu_labelled() { oc get nodes -l feature.node.kubernetes.io/pci-10de.present=true -o name 2>/dev/null | grep -q . || oc get nodes -l nvidia.com/gpu.present=true -o name 2>/dev/null | grep -q . || oc get nodes -o jsonpath='{range .items[*]}{.metadata.labels.nvidia\.com/gpu\.count}{"\n"}{end}' 2>/dev/null | grep -q '[1-9]'; }
+if wait_for 600 "a node to be labelled as a GPU node" gpu_labelled; then ok "GPU node(s): $(oc get nodes -o json | jq -r '.items[] | select((.metadata.labels["feature.node.kubernetes.io/pci-10de.present"]=="true") or (.metadata.labels["nvidia.com/gpu.present"]=="true") or ((.metadata.labels["nvidia.com/gpu.count"] // "0") != "0")) | .metadata.name' | tr '\n' ' ')"; else
+  fail "no node carries feature.node.kubernetes.io/pci-10de.present=true or nvidia.com/gpu.present=true"; debug "oc get pods -n openshift-nfd; oc get nodes --show-labels | tr ',' '\n' | grep -i 'pci-10de\|nvidia.com/gpu'"; fi
 
 step "NVIDIA GPU Operator: ClusterPolicy and GPU sharing"
 if oc get clusterpolicy -o name 2>/dev/null | grep -q .; then ok "ClusterPolicy $(oc get clusterpolicy -o jsonpath='{.items[0].metadata.name}') exists"; else

@@ -25,7 +25,18 @@ NAMESPACE = os.environ["NAMESPACE"]
 SECRET = os.environ.get("API_KEY_SECRET", "assistant-n8n-api")
 SA = "/var/run/secrets/kubernetes.io/serviceaccount"
 
-cookies = http.cookiejar.CookieJar()
+
+
+class InClusterCookiePolicy(http.cookiejar.DefaultCookiePolicy):
+    """n8n marks its login cookie Secure; this job talks to it over plain HTTP inside the
+    cluster, where the default policy would silently drop the cookie (every call after the
+    login then fails with 401)."""
+
+    def return_ok_secure(self, cookie, request):
+        return True
+
+
+cookies = http.cookiejar.CookieJar(policy=InClusterCookiePolicy())
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookies))
 
 
@@ -155,4 +166,13 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode()[:300]
+        except Exception:  # noqa: BLE001
+            pass
+        log(f"{exc.code} from {exc.url}: {detail or exc.reason}")
+        sys.exit(1)

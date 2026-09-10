@@ -423,13 +423,20 @@ step6() {
 step7() {
   say "${B}Step 7: n8n${N} (owner account and API key are created by the chart's n8n-setup job; this verifies the workflows)"
   [ -n "$N8N_URL" ] || { bad "n8n route not found; run step 6 first"; return 1; }
-  local key; key=$(oc get secret assistant-n8n-api -n "$PROJECT" -o jsonpath='{.data.N8N_API_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
-  if [ -z "$key" ]; then
-    local job; job=$(oc get job n8n-setup -n "$PROJECT" -o jsonpath='{.status.succeeded}/{.status.failed}' 2>/dev/null)
-    warn "no API key secret yet (job n8n-setup succeeded/failed: ${job:-not run})"
-    note "oc logs job/n8n-setup -n $PROJECT shows what it did; it runs after every Argo CD sync"
-    bad "n8n setup not finished"; return 1
-  fi
+  local key waited=0; key=$(oc get secret assistant-n8n-api -n "$PROJECT" -o jsonpath='{.data.N8N_API_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+  while [ -z "$key" ] && [ "$waited" -lt 600 ]; do   # the job runs during the Argo CD sync; give it 10 minutes
+    local pod; pod=$(oc get pods -n "$PROJECT" -l job-name=n8n-setup --no-headers 2>/dev/null | tail -1)
+    [ -n "$pod" ] || { bad "job n8n-setup has not run (no pod); oc get applications.argoproj.io voice-avatar-assistant -n openshift-gitops shows the sync state"; return 1; }
+    case "$pod" in
+      *CrashLoopBackOff*|*Error*)
+        bad "job n8n-setup is failing: ${pod}"; oc logs -n "$PROJECT" -l job-name=n8n-setup --tail=3 2>/dev/null | sed 's/^/     /'
+        note "the job restarts by itself after a fix; oc logs -n $PROJECT -l job-name=n8n-setup shows the full log"; return 1 ;;
+    esac
+    [ $((waited % 60)) -eq 0 ] && note "waiting for job n8n-setup to create the owner account and API key (${waited}s): ${pod}"
+    sleep 15; waited=$((waited + 15))
+    key=$(oc get secret assistant-n8n-api -n "$PROJECT" -o jsonpath='{.data.N8N_API_KEY}' 2>/dev/null | base64 -d 2>/dev/null)
+  done
+  [ -n "$key" ] || { bad "job n8n-setup did not store an API key in 10 minutes; oc logs -n $PROJECT -l job-name=n8n-setup"; return 1; }
   ok "API key from secret assistant-n8n-api"
   local wf; wf=$(curl -s --max-time 20 -H "X-N8N-API-KEY: $key" "$N8N_URL/api/v1/workflows?limit=50" | jq -r '.data[]? | "\(.active) \(.name)"' 2>/dev/null)
   [ -n "$wf" ] || { bad "n8n did not answer with the key at $N8N_URL/api/v1/workflows"; return 1; }

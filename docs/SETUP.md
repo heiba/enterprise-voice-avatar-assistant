@@ -8,6 +8,38 @@ look like and how to get there; this page is the reference for the script itself
 call it, what each step checks and changes, where it keeps its files, and what to do when a
 step stops.
 
+## Run it
+
+1. SSH to the bastion host with the host, user and password from the provisioning e-mail:
+
+   ```bash
+   ssh lab-user@bastion.<guid>.<base domain>
+   ```
+
+   Keep the e-mail at hand: if the bastion is not logged in to the cluster, or its session
+   expired, the script asks for the API URL (it proposes the one it finds on the host), the
+   user (`kubeadmin`) and the password, and logs in for you.
+
+2. Clone the repository:
+
+   ```bash
+   git clone https://github.com/rh-ai-quickstart/enterprise-voice-avatar-assistant.git ~/enterprise-voice-avatar-assistant && cd ~/enterprise-voice-avatar-assistant
+   ```
+
+3. Run the setup and follow it:
+
+   ```bash
+   scripts/setup.sh
+   ```
+
+   It logs in if the bastion is not, prints the state of the cluster and of every step, then
+   runs the remaining steps one after the other. It stops only where it needs something from
+   you (the keys and browser actions in step 5) or when a step fails, with the reason and the
+   commands that show more; run it again and it resumes at that step. `scripts/setup.sh --status`
+   only shows the state, `scripts/setup.sh --step N` runs one step again, `scripts/setup.sh --yes`
+   never prompts. Progress and discovered facts are in `~/.assistant-setup/state.env`, logs of
+   each step in `~/.assistant-setup/logs/`.
+
 ## Quick reference
 
 ```bash
@@ -208,6 +240,22 @@ URL, the n8n URL with its login, and the pointer to [docs/demo-script.md](demo-s
   the old `~/secrets.env` to the new bastion to skip re-pasting them. The Slack request URL
   contains the domain: step 5 asks whether the app is new or reused and, for a reused one,
   shows the URL to set and waits for the confirmation.
+
+## Day two
+
+- **Application updates.** Every push to `main` that touches the services builds images and
+  commits their tags into `chart/values-demo-cluster.yaml`; Argo CD syncs within minutes.
+- **A changed key.** Edit `~/secrets.env`, then `scripts/setup.sh --step 5` (rewrites the
+  integrations, model-key and n8n secrets, generated passwords are kept) and
+  `oc rollout restart deployment/n8n deployment/rag-api deployment/voice-agent -n voice-avatar-assistant`.
+- **Chart values** (faces, voices, model shares) are commits to `chart/values-demo-cluster.yaml`;
+  `scripts/deploy-argocd.sh` accepts `REPO_URL` and `TARGET_REVISION` for a fork or a branch.
+- **Workflows.** A commit that changes `chart/files/n8n-workflows/` restarts n8n at the next
+  sync, which re-imports and re-publishes the workflows; edits made in the n8n editor are
+  overwritten by that, so make them in the files.
+- **The profile.** `~/.assistant-setup/values-object.json` is merged over the values file by
+  Argo CD; to change a model share, edit it and run `scripts/setup.sh --step 6`, or change the
+  defaults in `scripts/setup.sh` (`write_values_object`) for every cluster.
 
 ## When a step stops
 

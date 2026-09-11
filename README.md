@@ -244,85 +244,41 @@ the images are public on Quay and Argo CD reads this public repository.
 
 ### Run it
 
-1. SSH to the bastion host with the host, user and password from the provisioning e-mail:
+Three commands on the bastion host: SSH in with the host, user and password from the
+provisioning e-mail, clone, run.
 
-   ```bash
-   ssh lab-user@bastion.<guid>.<base domain>
-   ```
+```bash
+ssh lab-user@bastion.<guid>.<base domain>
+```
 
-   Keep the e-mail at hand: if the bastion is not logged in to the cluster, or its session
-   expired, the script asks for the API URL (it proposes the one it finds on the host), the
-   user (`kubeadmin`) and the password, and logs in for you.
+```bash
+git clone https://github.com/rh-ai-quickstart/enterprise-voice-avatar-assistant.git ~/enterprise-voice-avatar-assistant && cd ~/enterprise-voice-avatar-assistant
+```
 
-2. Clone the repository:
+```bash
+scripts/setup.sh
+```
 
-   ```bash
-   git clone https://github.com/rh-ai-quickstart/enterprise-voice-avatar-assistant.git ~/enterprise-voice-avatar-assistant && cd ~/enterprise-voice-avatar-assistant
-   ```
+The script logs in to the cluster if the bastion is not (it asks for the API URL, the user
+and the password), shows the state of nine steps, and runs the remaining ones in order. It
+stops only for the keys and browser actions of step 5 or when a step fails, and resumes where
+it stopped on the next run. The steps:
 
-3. Run the setup and follow it:
+1. **Cluster and prerequisites**: versions, KServe, operators, GPUs, the deployed model, storage.
+2. **Deployment profile**: decided from the GPUs found; too few or too small, and it stops with what is required, what the cluster has, and the options.
+3. **Cluster bootstrap**: missing operators, GPU time-slicing, the deployed model's GPU share lowered to 55% so Whisper (15%) and BGE-M3 (12%) fit next to it, Argo CD, the project.
+4. **TURN certificate**: the cluster's wildcard certificate copied into the project, or one from Let's Encrypt.
+5. **Keys and integrations**: one file, `~/secrets.env`; the n8n owner login, the Slack app, the Tavus key, the Google service account and the Drive folder, each browser action shown one at a time and each value verified against the service.
+6. **Deploy with Argo CD**: the application with the domain, the model endpoint and the profile; waits for the sync, the models and the pods; runs the connectivity test.
+7. **n8n workflows**: owner account, API key, Slack credential and workflows are created by the chart; this step checks that all seven are active.
+8. **Sample documents**: fifteen files uploaded and indexed.
+9. **Verification**: `scripts/demo-preflight.sh`, then the URLs and the demo script.
 
-   ```bash
-   scripts/setup.sh
-   ```
-
-   It logs in if the bastion is not, prints the state of the cluster and of every step, then
-   runs the remaining steps one after the other. It stops only where it needs something from
-   you (the keys in step 5) or when a step fails, with the reason and the commands that show
-   more; run it again and it resumes at that step. `scripts/setup.sh --status` only shows the
-   state, `scripts/setup.sh --step N` runs one step again, `scripts/setup.sh --yes` skips the
-   optional prompts. Progress and discovered facts are in `~/.assistant-setup/state.env`, logs
-   of each step in `~/.assistant-setup/logs/`. The options, the files, what every step checks
-   and changes, and what to do when one stops are in [docs/SETUP.md](docs/SETUP.md).
-
-### What the steps do
-
-| Step | What happens | Manual part |
-|---|---|---|
-| 1 Cluster and prerequisites | Checks the login and tools, the OpenShift and OpenShift AI versions, KServe, the operators, the GPUs, the deployed language model, the storage class | none |
-| 2 Deployment profile | Uses every GPU found (below). Not enough GPUs or GPU memory for the demo: it stops and states what is required, what the cluster has, and the options | none |
-| 3 Cluster bootstrap | `scripts/bootstrap-cluster.sh`: installs missing operators from `deploy/bootstrap/`, sets KServe to Managed, applies GPU time-slicing, lowers the deployed model's GPU memory share so the others fit, waits for Argo CD, creates the project with its Argo CD and dashboard labels | none, 5 to 15 min |
-| 4 TURN certificate | Copies the cluster's wildcard certificate into the project for TURN over TLS (voice through corporate networks), or asks Let's Encrypt for one through cert-manager if the cluster's is not trusted | an e-mail address in the cert-manager case |
-| 5 Keys and integrations | Creates `~/secrets.env` from `secrets.env.example`, then walks through the browser actions one at a time (n8n owner login, Slack app from the manifest it prints with this cluster's host, Tavus key, a Google Cloud service account whose JSON key you paste into the terminal, a Drive folder shared with it), waits for your confirmation where you have to act, asks for each value with hidden input (Enter alone asks again, `Skip` leaves that integration off) and verifies it against the service: the Slack token, the five channels (created and joined by the script), the request URL for a reused app, the Tavus key, the Google key and the folder sharing. Then it creates the secrets in the project. Nothing is typed into `oc`, nothing is copied by hand | the browser work |
-| 6 Deploy with Argo CD | `scripts/deploy-argocd.sh`: finds the language model, creates the secrets from the file, registers the Argo CD application with the domain, the model endpoint and the profile, waits for the sync, the models and the pods, prints the URLs, runs the connectivity test pod | none, 10 to 20 min |
-| 7 n8n workflows | The chart's `n8n-setup` job has created the owner account and an API key; this step reads the key from its secret and checks that WF1 to WF7 are active, then prints where the owner password is | none |
-| 8 Sample documents | `scripts/load-sample-docs.sh`, waits for the ingestion, `scripts/check-index.sh` | none |
-| 9 Verification | `scripts/demo-preflight.sh`: models, Argo CD, test pod, n8n webhooks; then the URLs and the pointer to the demo script | none |
-
-Each step checks the cluster before acting, so work already done by hand or by an earlier
-run is recognised. Step 5 is the only one that needs you in a browser; n8n itself needs no
-visit: its owner account, API key, Slack credential and workflows are all created by the chart.
-
-### GPUs and profiles
-
-| GPUs on the cluster | Profile | Layout |
-|---|---|---|
-| none | stop | The script stops: the demo needs one GPU with 24 GB for the language model, Whisper and BGE-M3. Remote OpenAI-compatible endpoints can replace them: `PROFILE=remote REMOTE_LLM_ENDPOINT=… REMOTE_LLM_MODEL=… REMOTE_STT_ENDPOINT=… REMOTE_EMB_ENDPOINT=… scripts/setup.sh`, with the keys in `~/secrets.env` |
-| 1 or more, 24 GB each | `gpu` | Every GPU is used and advertised four times through the GPU Operator's time-slicing; the language model gets 55% of a card (the deployed Llama 3.2 3B, or Llama 3.1 8B 4-bit deployed by the chart at 45%), Whisper 15%, BGE-M3 12%. No guardrail model runs in this demo. A GPU with less than 20 GB stops the script |
-
-The profile is a small JSON overlay (`~/.assistant-setup/values-object.json`) merged over
-`chart/values-demo-cluster.yaml` by Argo CD, so the values file in git stays cluster-neutral:
-it holds no domain, no endpoint and no key.
-
-### Day two
-
-- **Application updates.** Every push to `main` that touches the services builds images and
-  commits their tags into `chart/values-demo-cluster.yaml`; Argo CD syncs within minutes.
-- **A changed key.** Edit `~/secrets.env`, then `scripts/setup.sh --step 5` (rewrites the
-  integrations secret, passwords are kept) and `oc rollout restart deployment/n8n deployment/rag-api deployment/voice-agent -n voice-avatar-assistant`.
-- **Chart values** (faces, voices, model shares) are commits to `chart/values-demo-cluster.yaml`;
-  `scripts/deploy-argocd.sh` accepts `REPO_URL` and `TARGET_REVISION` for a fork or a branch.
-- **Workflows.** A commit that changes `chart/files/n8n-workflows/` restarts n8n at the next
-  sync, which re-imports and re-publishes the workflows; edits made in the n8n editor are
-  overwritten by that, so make them in the files.
-- **Next cluster.** Clone, `scripts/setup.sh`. Tokens, the service account key and the Drive
-  folder stay valid; step 5 asks whether the Slack app is reused and shows the request URL to
-  update in that case, since it contains the cluster domain.
-
-When something fails, the step prints a `debug:` line with the commands that show why, the
-logs are in `~/.assistant-setup/logs/`, [docs/SETUP.md](docs/SETUP.md#when-a-step-stops)
-has the symptoms seen per step, and [docs/troubleshooting.md](docs/troubleshooting.md) lists
-the rest by area.
+Every step checks the cluster before acting, so work done by hand or by an earlier run is
+recognised. The options (`--status`, `--step N`, `--yes`, `--reset`), the files the script
+keeps, what each step checks and changes, remote model endpoints instead of GPUs, day-two
+operations and the symptoms seen per step are in [docs/SETUP.md](docs/SETUP.md);
+[docs/troubleshooting.md](docs/troubleshooting.md) lists the rest by area.
 
 ### Prerequisites
 
